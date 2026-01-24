@@ -2,7 +2,7 @@ package me.s3b4s5.summonlib.api.follow;
 
 import com.hypixel.hytale.math.vector.Vector3d;
 
-public final class BackOrbitFollowController implements ModelFollowController {
+public final class BackOrbitFollowController implements ModelFollowController, OwnerPitchClamp {
 
     private final double baseBack;
     private final double radius;
@@ -12,6 +12,10 @@ public final class BackOrbitFollowController implements ModelFollowController {
     private final double orbitRadius;
     private final double attackHeight;
 
+    // Pitch clamp (radians). Positive pitch usually means looking down.
+    private final double minPitchRad;
+    private final double maxPitchRad;
+
     public BackOrbitFollowController(
             double baseBack,
             double radius,
@@ -20,12 +24,36 @@ public final class BackOrbitFollowController implements ModelFollowController {
             double orbitRadius,
             double attackHeight
     ) {
+        // Default clamp (tune as you like)
+        this(baseBack, radius, spreadDeg, baseHeight, orbitRadius, attackHeight, -0.6, 0.55);
+    }
+
+    public BackOrbitFollowController(
+            double baseBack,
+            double radius,
+            double spreadDeg,
+            double baseHeight,
+            double orbitRadius,
+            double attackHeight,
+            double minPitchRad,
+            double maxPitchRad
+    ) {
         this.baseBack = baseBack;
         this.radius = radius;
         this.spreadDeg = spreadDeg;
         this.baseHeight = baseHeight;
         this.orbitRadius = orbitRadius;
         this.attackHeight = attackHeight;
+
+        this.minPitchRad = Math.min(minPitchRad, maxPitchRad);
+        this.maxPitchRad = Math.max(minPitchRad, maxPitchRad);
+    }
+
+    @Override
+    public double clampOwnerPitch(double pitchRad) {
+        if (pitchRad < minPitchRad) return minPitchRad;
+        if (pitchRad > maxPitchRad) return maxPitchRad;
+        return pitchRad;
     }
 
     @Override
