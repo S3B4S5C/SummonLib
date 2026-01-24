@@ -15,9 +15,15 @@ import com.hypixel.hytale.server.core.modules.entitystats.EntityStatMap;
 import com.hypixel.hytale.server.core.modules.entitystats.asset.EntityStatType;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.Universe;
+import com.hypixel.hytale.server.core.universe.world.SpawnUtil;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import com.hypixel.hytale.server.core.util.TargetUtil;
+import com.hypixel.hytale.component.ComponentAccessor;
+import com.hypixel.hytale.server.core.asset.type.attitude.Attitude;
+import com.hypixel.hytale.server.core.entity.entities.Player;
+import com.hypixel.hytale.server.npc.entities.NPCEntity;
+import com.hypixel.hytale.server.npc.role.Role;
 import me.s3b4s5.summonlib.api.SummonDefinition;
 import me.s3b4s5.summonlib.api.SummonRegistry;
 import me.s3b4s5.summonlib.api.follow.BackOrbitFollowController;
@@ -27,6 +33,9 @@ import me.s3b4s5.summonlib.stats.SummonStats;
 import me.s3b4s5.summonlib.tags.SummonTag;
 import org.checkerframework.checker.nullness.compatqual.NonNullDecl;
 
+
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import javax.annotation.Nullable;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -68,6 +77,10 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
 
     private static final ModelFollowController DEFAULT_CONTROLLER =
             new BackOrbitFollowController(0.4, 1.4, 120.0, 0.8, 0.9, 0.8 * 0.6);
+
+    private static final ComponentType<EntityStore, Player> PLAYER_TYPE = Player.getComponentType();
+    private static final ComponentType<EntityStore, NPCEntity> NPC_TYPE = NPCEntity.getComponentType();
+
 
     public SummonCombatFollowSystem(ComponentType<EntityStore, SummonTag> summonTagType) {
         this.summonTagType = summonTagType;
@@ -165,11 +178,11 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
 
         if (targetRef != null && targetRef.isValid()) {
             double sx = cur.x - ownerPos.x, sy = cur.y - ownerPos.y, sz = cur.z - ownerPos.z;
-            if (sx*sx + sy*sy + sz*sz > leashSummonToOwner * leashSummonToOwner) {
+            if (sx * sx + sy * sy + sz * sz > leashSummonToOwner * leashSummonToOwner) {
                 focusTargetByOwner.remove(ownerUuid);
                 dropSummonTarget(summonUuid);
                 setBaseAnim(summonUuid, summonRef, ANIM_MOVE, true, store, true);
-                faceOwner(summonT, ownerRotObj, yawRad);
+                faceOwner(summonT, ownerRotObj, yawRad, controller);
                 moveTowards(dt, cur, home, followSpeed, summonT);
                 return;
             }
@@ -178,11 +191,11 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
             if (tt != null) {
                 Vector3d tp = tt.getPosition();
                 double tx = tp.x - ownerPos.x, ty = tp.y - ownerPos.y, tz = tp.z - ownerPos.z;
-                if (tx*tx + ty*ty + tz*tz > leashTargetToOwner * leashTargetToOwner) {
+                if (tx * tx + ty * ty + tz * tz > leashTargetToOwner * leashTargetToOwner) {
                     focusTargetByOwner.remove(ownerUuid);
                     dropSummonTarget(summonUuid);
                     setBaseAnim(summonUuid, summonRef, ANIM_MOVE, true, store, true);
-                    faceOwner(summonT, ownerRotObj, yawRad);
+                    faceOwner(summonT, ownerRotObj, yawRad, controller);
                     moveTowards(dt, cur, home, followSpeed, summonT);
                     return;
                 }
@@ -269,7 +282,7 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
             if (targetT == null) {
                 dropSummonTarget(summonUuid);
                 setBaseAnim(summonUuid, summonRef, ANIM_MOVE, true, store, false);
-                faceOwner(summonT, ownerRotObj, yawRad);
+                faceOwner(summonT, ownerRotObj, yawRad, controller);
                 moveTowards(dt, cur, home, followSpeed, summonT);
                 return;
             }
@@ -280,7 +293,7 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
                 focusTargetByOwner.remove(ownerUuid);
                 dropSummonTarget(summonUuid);
                 setBaseAnim(summonUuid, summonRef, ANIM_MOVE, true, store, true);
-                faceOwner(summonT, ownerRotObj, yawRad);
+                faceOwner(summonT, ownerRotObj, yawRad, controller);
                 moveTowards(dt, cur, home, followSpeed, summonT);
                 return;
             }
@@ -294,7 +307,8 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
             moveTowards(dt, cur, anchor, travelToTargetSpeed, summonT);
 
             boolean attackMode = Boolean.TRUE.equals(attackModeBySummon.get(summonUuid));
-            if (KEEP_ATTACK_WHILE_HAS_TARGET && attackMode) setBaseAnim(summonUuid, summonRef, ANIM_ATTACK, true, store, false);
+            if (KEEP_ATTACK_WHILE_HAS_TARGET && attackMode)
+                setBaseAnim(summonUuid, summonRef, ANIM_ATTACK, true, store, false);
             else setBaseAnim(summonUuid, summonRef, ANIM_MOVE, true, store, false);
 
             if (attackMode
@@ -305,7 +319,7 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
                 double dx = anchor.x - summonT.getPosition().x;
                 double dy = anchor.y - summonT.getPosition().y;
                 double dz = anchor.z - summonT.getPosition().z;
-                double distSq = dx*dx + dy*dy + dz*dz;
+                double distSq = dx * dx + dy * dy + dz * dz;
 
                 if (distSq <= (hitDistance * hitDistance)) {
                     if (store.getComponent(targetRef, NetworkId.getComponentType()) != null) {
@@ -326,10 +340,10 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
         dropSummonTarget(summonUuid);
 
         Vector3d dHome = new Vector3d(home.x - cur.x, home.y - cur.y, home.z - cur.z);
-        boolean returning = (dHome.x*dHome.x + dHome.y*dHome.y + dHome.z*dHome.z) > 0.02;
+        boolean returning = (dHome.x * dHome.x + dHome.y * dHome.y + dHome.z * dHome.z) > 0.02;
 
         setBaseAnim(summonUuid, summonRef, returning ? ANIM_MOVE : ANIM_IDLE, true, store, false);
-        faceOwner(summonT, ownerRotObj, yawRad);
+        faceOwner(summonT, ownerRotObj, yawRad, controller);
         moveTowards(dt, cur, home, followSpeed, summonT);
     }
 
@@ -421,18 +435,25 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
         }
 
         if (preferred != null && preferred.isValid() && isAlive(preferred, store)) {
-            if (!preferred.equals(ownerRef) && store.getComponent(preferred, summonTagType) == null) {
+
+            // Only accept hostile targets (strict)
+            if (isAllowedTargetHostileOnly(store, ownerRef, preferred)
+                    && !preferred.equals(ownerRef)
+                    && store.getComponent(preferred, summonTagType) == null
+                    && store.getComponent(preferred, NetworkId.getComponentType()) != null) {
+
                 TransformComponent pt = store.getComponent(preferred, TransformComponent.getComponentType());
                 if (pt != null) {
                     Vector3d pp = pt.getPosition();
+
                     if (isWithin(summonPos, pp, radius)
-                            && store.getComponent(preferred, NetworkId.getComponentType()) != null
                             && passesLoS(world, summonPos, ownerEye, pp, requireOwnerLoS, requireSummonLoS)) {
                         return preferred;
                     }
                 }
             }
         }
+
 
         Ref<EntityStore> next = findClosestAliveVisibleInSphere(
                 summonPos, ownerEye, radius, store, world, ownerRef, requireOwnerLoS, requireSummonLoS
@@ -470,6 +491,8 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
             if (store.getComponent(r, summonTagType) != null) continue;
             if (store.getComponent(r, NetworkId.getComponentType()) == null) continue;
 
+            if (!isAllowedTargetHostileOnly(store, ownerRef, r)) continue;
+
             TransformComponent t = store.getComponent(r, TransformComponent.getComponentType());
             if (t == null) continue;
             if (!isAlive(r, store)) continue;
@@ -478,8 +501,11 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
             if (!passesLoS(world, center, ownerEye, p, requireOwnerLoS, requireSummonLoS)) continue;
 
             double dx = p.x - center.x, dy = p.y - center.y, dz = p.z - center.z;
-            double d2 = dx*dx + dy*dy + dz*dz;
-            if (d2 < bestD2) { bestD2 = d2; best = r; }
+            double d2 = dx * dx + dy * dy + dz * dz;
+            if (d2 < bestD2) {
+                bestD2 = d2;
+                best = r;
+            }
         }
 
         return best;
@@ -496,7 +522,7 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
         double dy = to.y - from.y;
         double dz = to.z - from.z;
 
-        double dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+        double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
         if (dist <= 0.25) return true;
 
         double inv = 1.0 / dist;
@@ -524,7 +550,7 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
 
     private boolean isWithin(Vector3d a, Vector3d b, double radius) {
         double dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
-        return dx*dx + dy*dy + dz*dz <= radius*radius;
+        return dx * dx + dy * dy + dz * dz <= radius * radius;
     }
 
     private void applyPendingDamageNow(
@@ -633,21 +659,54 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
 
     private static AnimationSlot resolveSlot(String... names) {
         for (String n : names) {
-            try { return AnimationSlot.valueOf(n); } catch (Throwable ignored) {}
+            try {
+                return AnimationSlot.valueOf(n);
+            } catch (Throwable ignored) {
+            }
         }
         return AnimationSlot.values()[0];
     }
 
-    private void faceOwner(TransformComponent t, Object ownerRotation, double ownerYawRad) {
+    private void faceOwner(
+            TransformComponent t,
+            Object ownerRotation,
+            double ownerYawRad,
+            ModelFollowController controller
+    ) {
+        double minPitch = -0.6;
+        double maxPitch = 0.55;
+        if (controller instanceof me.s3b4s5.summonlib.api.follow.OwnerPitchClamp pc) {
+            // We'll use pc.clampOwnerPitch(...) below, keep defaults only as fallback.
+        }
+
+        // Try to preserve owner's yaw/roll but clamp pitch.
         if (ownerRotation instanceof com.hypixel.hytale.math.vector.Vector3f v) {
-            t.setRotation(v);
+            float pitch = v.getPitch();
+            float yaw = v.getYaw();
+            float roll = v.getRoll();
+
+            double clamped = (controller instanceof me.s3b4s5.summonlib.api.follow.OwnerPitchClamp pc)
+                    ? pc.clampOwnerPitch(pitch)
+                    : clamp(pitch, minPitch, maxPitch);
+
+            var rot = t.getRotation();
+            rot.setPitch((float) clamped);
+            rot.setYaw(yaw);
+            rot.setRoll(roll);
             return;
         }
+
+        // Fallback: yaw only, no pitch.
         var rot = t.getRotation();
         rot.setPitch(0f);
         rot.setYaw((float) ownerYawRad);
         rot.setRoll(0f);
     }
+
+    private static double clamp(double v, double a, double b) {
+        return (v < a) ? a : (v > b) ? b : v;
+    }
+
 
     private void faceTargetLook(TransformComponent t, Vector3d from, Vector3d to) {
         double vx = to.x - from.x;
@@ -658,4 +717,76 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
         rot.setYaw(yawRad);
         rot.setRoll(0f);
     }
+
+    private boolean isAllowedTargetHostileOnly(
+            Store<EntityStore> store,
+            Ref<EntityStore> ownerRef,
+            Ref<EntityStore> candidateRef
+    ) {
+        if (candidateRef == null || !candidateRef.isValid()) return false;
+
+        // Never target players
+        if (store.getArchetype(candidateRef).contains(PLAYER_TYPE)) return false;
+
+        // Only target NPCs (strict hostile-only)
+        NPCEntity npc = store.getComponent(candidateRef, NPC_TYPE);
+        if (npc == null) return false;
+
+        Role role = tryGetRoleFromNpc(npc);
+        if (role == null) return false;
+
+        Attitude a = tryGetAttitude(role, candidateRef, ownerRef, store);
+        return a == Attitude.HOSTILE;
+    }
+
+    private Role tryGetRoleFromNpc(NPCEntity npc) {
+        try {
+            // Any public no-arg method returning Role
+            for (Method m : npc.getClass().getMethods()) {
+                if (m.getParameterCount() != 0) continue;
+                if (!Role.class.isAssignableFrom(m.getReturnType())) continue;
+                Object r = m.invoke(npc);
+                if (r instanceof Role role) return role;
+            }
+        } catch (Throwable ignored) {
+        }
+
+        try {
+            // Any field of type Role (in case there is no getter)
+            for (Field f : npc.getClass().getDeclaredFields()) {
+                if (!Role.class.isAssignableFrom(f.getType())) continue;
+                f.setAccessible(true);
+                Object r = f.get(npc);
+                if (r instanceof Role role) return role;
+            }
+        } catch (Throwable ignored) {
+        }
+
+        return null;
+    }
+
+    private Attitude tryGetAttitude(Role role, Ref<EntityStore> selfRef, Ref<EntityStore> targetRef, ComponentAccessor<EntityStore> accessor) {
+        try {
+            Object ws = role.getWorldSupport();
+
+            // Try getAttitude(Ref, Ref, ComponentAccessor)
+            for (Method m : ws.getClass().getMethods()) {
+                if (!m.getName().equals("getAttitude")) continue;
+                if (m.getParameterCount() != 3) continue;
+
+                Class<?>[] p = m.getParameterTypes();
+                if (!Ref.class.isAssignableFrom(p[0])) continue;
+                if (!Ref.class.isAssignableFrom(p[1])) continue;
+                if (!p[2].isAssignableFrom(accessor.getClass()) && !ComponentAccessor.class.isAssignableFrom(p[2]))
+                    continue;
+
+                Object out = m.invoke(ws, selfRef, targetRef, accessor);
+                if (out instanceof Attitude a) return a;
+            }
+        } catch (Throwable ignored) {
+        }
+
+        return null;
+    }
+
 }
