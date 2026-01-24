@@ -1,0 +1,18 @@
+{
+  "Group": "s3b4s5",
+  "Name": "SummonLib",
+  "Version": "1.0.0",
+  "Description": "TODO Description..",
+  "Authors": [
+    {
+      "Name": "s3b4s5"
+    }
+  ],
+  "Website": "",
+  "ServerVersion": "*",
+  "Dependencies": {},
+  "OptionalDependencies": {},
+  "DisabledByDefault": false,
+  "Main": "me.s3b4s5.summonlib.SummonLib",
+  "IncludesAssetPack": true
+}

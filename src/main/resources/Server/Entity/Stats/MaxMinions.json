@@ -1,0 +1,7 @@
+{
+  "InitialValue": 1,
+  "Min": 0,
+  "Max": 1,
+  "ResetType": "MaxValue",
+  "IgnoreInvulnerability": true
+}
