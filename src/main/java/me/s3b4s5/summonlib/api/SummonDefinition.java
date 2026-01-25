@@ -21,6 +21,9 @@ public abstract class SummonDefinition {
     @Nullable
     public final SummonSpawnFactory summonSpawnFactory;
 
+    /** NEW: per-summon tuning for follow/combat/leash/hover/perf. Never null. */
+    public final SummonTuning tuning;
+
     protected SummonDefinition(
             String id,
             int slotCost,
@@ -31,6 +34,20 @@ public abstract class SummonDefinition {
             ModelFollowController followController,
             @Nullable SummonSpawnFactory summonSpawnFactory
     ) {
+        this(id, slotCost, damage, detectRadius, requireOwnerLoS, requireSummonLoS, followController, summonSpawnFactory, null);
+    }
+
+    protected SummonDefinition(
+            String id,
+            int slotCost,
+            float damage,
+            double detectRadius,
+            boolean requireOwnerLoS,
+            boolean requireSummonLoS,
+            ModelFollowController followController,
+            @Nullable SummonSpawnFactory summonSpawnFactory,
+            @Nullable SummonTuning tuning
+    ) {
         this.id = id;
         this.slotCost = slotCost;
         this.damage = damage;
@@ -39,5 +56,6 @@ public abstract class SummonDefinition {
         this.requireSummonLoS = requireSummonLoS;
         this.followController = followController;
         this.summonSpawnFactory = summonSpawnFactory;
+        this.tuning = SummonTuning.orDefault(tuning);
     }
 }

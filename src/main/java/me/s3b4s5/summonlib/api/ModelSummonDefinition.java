@@ -2,6 +2,7 @@ package me.s3b4s5.summonlib.api;
 
 import me.s3b4s5.summonlib.api.follow.ModelFollowController;
 
+import javax.annotation.Nullable;
 import java.util.function.IntFunction;
 
 public final class ModelSummonDefinition extends SummonDefinition {
@@ -35,4 +36,32 @@ public final class ModelSummonDefinition extends SummonDefinition {
         this.modelAssetByVariant = modelAssetByVariant;
         this.modelScale = modelScale;
     }
+
+    public ModelSummonDefinition(
+            String id,
+            int slotCost,
+            IntFunction<String> modelAssetByVariant,
+            float modelScale,
+            float damage,
+            double detectRadius,
+            boolean requireOwnerLoS,
+            boolean requireSummonLoS,
+            ModelFollowController followController,
+            @Nullable SummonTuning tuning
+    ) {
+        super(
+                id,
+                slotCost,
+                damage,
+                detectRadius,
+                requireOwnerLoS,
+                requireSummonLoS,
+                followController,
+                new ModelSummonSpawnFactory(modelAssetByVariant, modelScale),
+                tuning
+        );
+        this.modelAssetByVariant = modelAssetByVariant;
+        this.modelScale = modelScale;
+    }
+
 }

@@ -3,27 +3,21 @@ package me.s3b4s5.summonlib.systems;
 import com.hypixel.hytale.component.*;
 import com.hypixel.hytale.component.query.Query;
 import com.hypixel.hytale.component.system.tick.EntityTickingSystem;
+import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.math.vector.Transform;
 import com.hypixel.hytale.math.vector.Vector3d;
+import com.hypixel.hytale.math.vector.Vector3f;
 import com.hypixel.hytale.protocol.AnimationSlot;
-import com.hypixel.hytale.server.core.entity.AnimationUtils;
 import com.hypixel.hytale.server.core.entity.UUIDComponent;
 import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;
 import com.hypixel.hytale.server.core.modules.entity.damage.Damage;
 import com.hypixel.hytale.server.core.modules.entity.tracker.NetworkId;
-import com.hypixel.hytale.server.core.modules.entitystats.EntityStatMap;
-import com.hypixel.hytale.server.core.modules.entitystats.asset.EntityStatType;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.Universe;
-import com.hypixel.hytale.server.core.universe.world.SpawnUtil;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import com.hypixel.hytale.server.core.util.TargetUtil;
-import com.hypixel.hytale.component.ComponentAccessor;
-import com.hypixel.hytale.server.core.asset.type.attitude.Attitude;
-import com.hypixel.hytale.server.core.entity.entities.Player;
 import com.hypixel.hytale.server.npc.entities.NPCEntity;
-import com.hypixel.hytale.server.npc.role.Role;
 import me.s3b4s5.summonlib.api.SummonDefinition;
 import me.s3b4s5.summonlib.api.SummonRegistry;
 import me.s3b4s5.summonlib.api.follow.BackOrbitFollowController;
@@ -33,36 +27,63 @@ import me.s3b4s5.summonlib.stats.SummonStats;
 import me.s3b4s5.summonlib.tags.SummonTag;
 import org.checkerframework.checker.nullness.compatqual.NonNullDecl;
 
-
+import javax.annotation.Nullable;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import javax.annotation.Nullable;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
 
+    private static final HytaleLogger LOGGER = HytaleLogger.forEnclosingClass();
+
+    // =========================
+    // DEBUG / TESTS (tune these)
+    // =========================
+    private static final boolean DEBUG = true;
+    private static final boolean DEBUG_STACKTRACE = false;
+
+    // Set to "BatMinion" to focus; set null to log all summon IDs
+    private static final String DEBUG_ONLY_SUMMON_ID = "BatMinion";
+
+    // Log every X seconds per summon (throttled)
+    private static final float DEBUG_LOG_PERIOD_SEC = 0.50f;
+
+    // Extra verbose logs for movement/targeting
+    private static final boolean DEBUG_MOVEMENT = true;
+    private static final boolean DEBUG_TARGETING = true;
+    private static final boolean DEBUG_DAMAGE = true;
+    private static final boolean DEBUG_NPC_LEASH = true;
+
+    // Run reflection/self-tests once per world/store thread (guarded)
+    private static final boolean RUN_SELF_TESTS = true;
+
+    // =========================
+    // Config
+    // =========================
     private final ComponentType<EntityStore, SummonTag> summonTagType;
-
-    private final double followSpeed = 16.0;
-    private final double travelToTargetSpeed = 10.0;
-
-    private final double hitDistance = 1.2;
-
-    private static final float HIT_DAMAGE_DELAY_SEC = 0.14f;
-    private static final float ATTACK_INTERVAL_SEC = 0.45f;
-    private static final boolean KEEP_ATTACK_WHILE_HAS_TARGET = true;
 
     private static final String ANIM_IDLE = "Idle";
     private static final String ANIM_MOVE = "Move";
     private static final String ANIM_ATTACK = "Attack";
     private static final AnimationSlot SLOT_BASE = resolveSlot("Idle", "Passive", "Movement");
 
-    private final double leashSummonToOwner = 18.0;
-    private final double leashTargetToOwner = 14.0;
+    private static final ModelFollowController DEFAULT_CONTROLLER =
+            new BackOrbitFollowController(0.4, 1.4, 120.0, 0.8, 0.9, 0.8 * 0.6);
 
-    private final ConcurrentHashMap<UUID, String> lastBaseKeyBySummon = new ConcurrentHashMap<>();
+    // Movement strategies
+    private static final SummonMovement MOVE_LERP = new LerpTransformMovement();
+    private final SummonMovement MOVE_NPC = new NpcLeashMovement();
 
+    // Animators
+    private final SummonAnimator animatorDefault = new DefaultSummonAnimator(SLOT_BASE);
+    private final SummonAnimator animatorNpc = new NoopSummonAnimator();
+
+    private final SummonTargeting.ComponentTypeWrapper types = new SummonTargeting.ComponentTypeWrapper();
+
+    // =========================
+    // Runtime state
+    // =========================
     private final ConcurrentHashMap<UUID, Ref<EntityStore>> lastTargetBySummon = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Float> startDelayBySummon = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Float> attackCooldownBySummon = new ConcurrentHashMap<>();
@@ -73,14 +94,10 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
     private final ConcurrentHashMap<UUID, Ref<EntityStore>> focusTargetByOwner = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Float> ownerMaintenanceCooldown = new ConcurrentHashMap<>();
 
-    private volatile int cachedHealthIndex = -1;
-
-    private static final ModelFollowController DEFAULT_CONTROLLER =
-            new BackOrbitFollowController(0.4, 1.4, 120.0, 0.8, 0.9, 0.8 * 0.6);
-
-    private static final ComponentType<EntityStore, Player> PLAYER_TYPE = Player.getComponentType();
-    private static final ComponentType<EntityStore, NPCEntity> NPC_TYPE = NPCEntity.getComponentType();
-
+    // Debug throttles
+    private final ConcurrentHashMap<UUID, Float> debugCdBySummon = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, Boolean> introLogged = new ConcurrentHashMap<>();
+    private volatile boolean selfTestsRan = false;
 
     public SummonCombatFollowSystem(ComponentType<EntityStore, SummonTag> summonTagType) {
         this.summonTagType = summonTagType;
@@ -105,63 +122,136 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
             @NonNullDecl Store<EntityStore> store,
             @NonNullDecl CommandBuffer<EntityStore> cb
     ) {
+        if (RUN_SELF_TESTS && !selfTestsRan) {
+            selfTestsRan = true;
+            runSelfTests();
+        }
+
         SummonTag tag = chunk.getComponent(index, summonTagType);
-        Ref<EntityStore> summonRef = chunk.getReferenceTo(index);
         UUIDComponent uuidComp = chunk.getComponent(index, UUIDComponent.getComponentType());
         if (tag == null || uuidComp == null) return;
 
-        UUID ownerUuid = tag.getOwnerUuid();
-        PlayerRef owner = Universe.get().getPlayer(ownerUuid);
-        if (owner == null || owner.getWorldUuid() == null) return;
+        final String summonId = tag.getSummonId();
 
-        Ref<EntityStore> ownerRef = owner.getReference();
-        if (ownerRef == null || !ownerRef.isValid()) return;
-
-        Store<EntityStore> ownerAccessor = ownerRef.getStore();
-
+        Ref<EntityStore> summonRef = chunk.getReferenceTo(index);
         TransformComponent summonT = cb.getComponent(summonRef, TransformComponent.getComponentType());
-        if (summonT == null) return;
+        if (summonT == null) {
+            dbgOncePerSummon(dt, uuidComp.getUuid(), summonId, "WARN missing TransformComponent on summonRef");
+            return;
+        }
 
         UUID summonUuid = uuidComp.getUuid();
+
+        // Owner
+        UUID ownerUuid = tag.getOwnerUuid();
+        PlayerRef owner = Universe.get().getPlayer(ownerUuid);
+
+        if (owner == null || owner.getWorldUuid() == null) {
+            dbgOncePerSummon(dt, summonUuid, summonId, "Owner missing/offline -> removing summon. owner=" + ownerUuid);
+            cleanupSummonState(summonUuid, ownerUuid);
+            cb.removeEntity(summonRef, RemoveReason.REMOVE);
+            return;
+        }
+
+        Ref<EntityStore> ownerRef = owner.getReference();
+        if (ownerRef == null || !ownerRef.isValid()) {
+            dbgOncePerSummon(dt, summonUuid, summonId, "OwnerRef invalid -> removing summon. owner=" + ownerUuid);
+            cleanupSummonState(summonUuid, ownerUuid);
+            cb.removeEntity(summonRef, RemoveReason.REMOVE);
+            return;
+        }
+
+        Store<EntityStore> ownerStore = ownerRef.getStore();
+        if (ownerStore == null || ownerStore != store) {
+            dbgOncePerSummon(dt, summonUuid, summonId, "Owner store != summon store (cross-world or unloaded) -> removing summon.");
+            cleanupSummonState(summonUuid, ownerUuid);
+            cb.removeEntity(summonRef, RemoveReason.REMOVE);
+            return;
+        }
+
         World world = store.getExternalData().getWorld();
+        if (world == null) return;
 
-        SummonDefinition def = SummonRegistry.get(tag.getSummonId());
-        if (def == null) return;
+        SummonDefinition def = SummonRegistry.get(summonId);
+        if (def == null) {
+            dbgOncePerSummon(dt, summonUuid, summonId, "WARN SummonDefinition missing for summonId=" + summonId);
+            return;
+        }
 
-        double detectRadius = def.detectRadius;
-        float hitDamage = def.damage;
-        boolean requireOwnerLoS = def.requireOwnerLoS;
-        boolean requireSummonLoS = def.requireSummonLoS;
+        final var t = def.tuning;
 
-        ModelFollowController controller = (def.followController != null) ? def.followController : DEFAULT_CONTROLLER;
+        final double detectRadius = def.detectRadius;
+        final float hitDamage = def.damage;
+        final boolean requireOwnerLoS = def.requireOwnerLoS;
+        final boolean requireSummonLoS = def.requireSummonLoS;
 
+        final double followSpeed = t.followSpeed;
+        final double travelToTargetSpeed = t.travelToTargetSpeed;
+        final double hitDistance = t.hitDistance;
+
+        final float hitDelay = t.hitDamageDelaySec;
+        final float attackInterval = t.attackIntervalSec;
+        final boolean keepAttack = t.keepAttackWhileHasTarget;
+
+        final double leashSummonToOwner = t.leashSummonToOwner;
+        final double leashTargetToOwner = t.leashTargetToOwner;
+
+        // t.hoverAboveOwner / t.maxAboveOwner
+
+        final float ownerMaintenanceCooldownParam = t.ownerMaintenanceCooldownSec;
+        final ModelFollowController controller = (def.followController != null) ? def.followController : DEFAULT_CONTROLLER;
+
+        boolean isNpcSummon = store.getComponent(summonRef, NPCEntity.getComponentType()) != null;
+
+        SummonMovement movementFollow = isNpcSummon ? MOVE_NPC : MOVE_LERP;
+        SummonAnimator animator = isNpcSummon ? animatorNpc : animatorDefault;
+
+        // Owner transform/look
         Transform ownerTr = owner.getTransform();
         Vector3d ownerPos = ownerTr.getPosition();
 
-        Transform ownerLook = TargetUtil.getLook(ownerRef, ownerAccessor);
+        Transform ownerLook = TargetUtil.getLook(ownerRef, ownerStore);
         Vector3d ownerEye = ownerLook.getPosition();
-        Object ownerRotObj = ownerLook.getRotation();
-        double yawRad = ownerLook.getRotation().getYaw();
+        Vector3f ownerRot = ownerLook.getRotation();
+        double yawRad = ownerRot.getYaw();
 
-        if (tryRunOwnerMaintenance(dt, ownerUuid)) {
+        if (shouldLog(dt, summonUuid, summonId)) {
+            if (!Boolean.TRUE.equals(introLogged.get(summonUuid))) {
+                introLogged.put(summonUuid, true);
+                dbg(summonUuid, summonId, "INTRO isNpcSummon=" + isNpcSummon
+                        + " owner=" + ownerUuid
+                        + " detectRadius=" + detectRadius
+                        + " dmg=" + hitDamage
+                        + " requireOwnerLoS=" + requireOwnerLoS
+                        + " requireSummonLoS=" + requireSummonLoS
+                        + " leashSummonToOwner=" + leashSummonToOwner
+                        + " leashTargetToOwner=" + leashTargetToOwner);
+            }
+        }
+
+        // Owner maintenance (slots + indexing)
+        if (tryRunOwnerMaintenance(dt, ownerUuid, ownerMaintenanceCooldownParam)) {
             enforceSlotsAndRebuild(store, cb, ownerRef, ownerUuid);
         }
 
-        Vector3d home = controller.computeHome(
+        Vector3d homeRaw = controller.computeHome(
                 ownerPos,
                 yawRad,
                 Math.max(0, tag.groupIndex),
                 Math.max(1, tag.groupTotal)
         );
 
+        Vector3d home = applyOwnerHoverYOffset(ownerPos, homeRaw, t.hoverAboveOwner, t.maxAboveOwner);
         Vector3d cur = summonT.getPosition();
 
+        // Validate focus target
         Ref<EntityStore> focus = focusTargetByOwner.get(ownerUuid);
-        if (focus != null && (!focus.isValid() || !isAlive(focus, store))) {
+        if (focus != null && (!focus.isValid() || !SummonTargeting.isAlive(focus, store))) {
             focusTargetByOwner.remove(ownerUuid);
             focus = null;
         }
 
+        // Target select/update
         Ref<EntityStore> targetRef = null;
         if (detectRadius > 0.0) {
             targetRef = getOrUpdateSummonTarget(
@@ -169,43 +259,74 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
                     store, world, cur, ownerEye, detectRadius, focus,
                     requireOwnerLoS, requireSummonLoS
             );
-            if (targetRef != null) {
-                focusTargetByOwner.putIfAbsent(ownerUuid, targetRef);
-            }
+            if (targetRef != null) focusTargetByOwner.putIfAbsent(ownerUuid, targetRef);
         } else {
             dropSummonTarget(summonUuid);
         }
 
+        if (shouldLog(dt, summonUuid, summonId) && DEBUG_MOVEMENT) {
+            double hogCur = SummonTargeting.heightOverGround(world, cur, 128);
+            double hogHome = SummonTargeting.heightOverGround(world, home, 128);
+            dbg(summonUuid, summonId,
+                    String.format(Locale.ROOT,
+                            "POS cur=(%.2f %.2f %.2f) HoG=%.2f | home=(%.2f %.2f %.2f) HoG=%.2f | owner=(%.2f %.2f %.2f)",
+                            cur.x, cur.y, cur.z, hogCur,
+                            home.x, home.y, home.z, hogHome,
+                            ownerPos.x, ownerPos.y, ownerPos.z
+                    )
+            );
+        }
+
+        // Leash constraints relative to owner
         if (targetRef != null && targetRef.isValid()) {
-            double sx = cur.x - ownerPos.x, sy = cur.y - ownerPos.y, sz = cur.z - ownerPos.z;
-            if (sx * sx + sy * sy + sz * sz > leashSummonToOwner * leashSummonToOwner) {
+            if (distSq(cur, ownerPos) > leashSummonToOwner * leashSummonToOwner) {
+                if (DEBUG_TARGETING && shouldLog(dt, summonUuid, summonId)) {
+                    dbg(summonUuid, summonId, "LEASH break (summon too far from owner). Dropping target, returning home.");
+                }
                 focusTargetByOwner.remove(ownerUuid);
                 dropSummonTarget(summonUuid);
-                setBaseAnim(summonUuid, summonRef, ANIM_MOVE, true, store, true);
-                faceOwner(summonT, ownerRotObj, yawRad, controller);
-                moveTowards(dt, cur, home, followSpeed, summonT);
+
+                animator.setBaseAnim(summonUuid, summonRef, ANIM_MOVE, true, store, true);
+                if (isNpcSummon) {
+                    movementFollow.setDesiredPointIfSupported(store, cb, summonRef, home, yawRad, 0);
+                } else {
+                    movementFollow.faceOwner(summonT, ownerRot, yawRad, controller);
+                    movementFollow.moveTowards(dt, cur, home, followSpeed, summonT);
+                }
                 return;
             }
 
             TransformComponent tt = store.getComponent(targetRef, TransformComponent.getComponentType());
             if (tt != null) {
                 Vector3d tp = tt.getPosition();
-                double tx = tp.x - ownerPos.x, ty = tp.y - ownerPos.y, tz = tp.z - ownerPos.z;
-                if (tx * tx + ty * ty + tz * tz > leashTargetToOwner * leashTargetToOwner) {
+                if (distSq(tp, ownerPos) > leashTargetToOwner * leashTargetToOwner) {
+                    if (DEBUG_TARGETING && shouldLog(dt, summonUuid, summonId)) {
+                        dbg(summonUuid, summonId, "LEASH break (target too far from owner). Dropping target, returning home.");
+                    }
                     focusTargetByOwner.remove(ownerUuid);
                     dropSummonTarget(summonUuid);
-                    setBaseAnim(summonUuid, summonRef, ANIM_MOVE, true, store, true);
-                    faceOwner(summonT, ownerRotObj, yawRad, controller);
-                    moveTowards(dt, cur, home, followSpeed, summonT);
+
+                    animator.setBaseAnim(summonUuid, summonRef, ANIM_MOVE, true, store, true);
+                    if (isNpcSummon) {
+                        movementFollow.setDesiredPointIfSupported(store, cb, summonRef, home, yawRad, 0);
+                    } else {
+                        movementFollow.faceOwner(summonT, ownerRot, yawRad, controller);
+                        movementFollow.moveTowards(dt, cur, home, followSpeed, summonT);
+                    }
                     return;
                 }
             }
         }
 
+        // Target change handling
         Ref<EntityStore> lastT = lastTargetBySummon.get(summonUuid);
         boolean changed = (lastT == null && targetRef != null) || (lastT != null && (targetRef == null || !lastT.equals(targetRef)));
 
         if (changed) {
+            if (DEBUG_TARGETING && shouldLog(dt, summonUuid, summonId)) {
+                dbg(summonUuid, summonId, "TARGET changed: " + (lastT == null ? "null" : "set") + " -> " + (targetRef == null ? "null" : "set"));
+            }
+
             if (targetRef == null) lastTargetBySummon.remove(summonUuid);
             else lastTargetBySummon.put(summonUuid, targetRef);
 
@@ -216,14 +337,15 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
             if (targetRef != null) {
                 int gi = Math.max(0, tag.globalIndex);
                 int gt = Math.max(1, tag.globalTotal);
-                float stagger = computeStartStagger(gi, gt);
+                float stagger = computeStartStagger(gi, gt, attackInterval);
                 startDelayBySummon.put(summonUuid, stagger);
 
                 boolean startNow = (stagger <= 0f);
                 attackModeBySummon.put(summonUuid, startNow);
 
-                if (startNow && KEEP_ATTACK_WHILE_HAS_TARGET) {
-                    setBaseAnim(summonUuid, summonRef, ANIM_ATTACK, true, store, true);
+                // Animación para no-NPC; para NPC la animación irá por separado (Noop)
+                if (startNow && keepAttack && !isNpcSummon) {
+                    animator.setBaseAnim(summonUuid, summonRef, ANIM_ATTACK, true, store, true);
                 }
             } else {
                 startDelayBySummon.put(summonUuid, 0f);
@@ -231,6 +353,7 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
             }
         }
 
+        // Start delay / attack mode
         float startDelay = startDelayBySummon.getOrDefault(summonUuid, 0f);
         if (targetRef != null) {
             boolean attackMode = Boolean.TRUE.equals(attackModeBySummon.get(summonUuid));
@@ -242,15 +365,21 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
 
                 if (prev > 0f && startDelay <= 0f) {
                     attackModeBySummon.put(summonUuid, true);
-                    if (KEEP_ATTACK_WHILE_HAS_TARGET) {
-                        setBaseAnim(summonUuid, summonRef, ANIM_ATTACK, true, store, true);
+                    if (keepAttack && !isNpcSummon) {
+                        animator.setBaseAnim(summonUuid, summonRef, ANIM_ATTACK, true, store, true);
+                    }
+                    if (DEBUG_TARGETING && shouldLog(dt, summonUuid, summonId)) {
+                        dbg(summonUuid, summonId, "ATTACK_MODE enabled after stagger.");
                     }
                 }
             } else {
                 if (!attackMode) {
                     attackModeBySummon.put(summonUuid, true);
-                    if (KEEP_ATTACK_WHILE_HAS_TARGET) {
-                        setBaseAnim(summonUuid, summonRef, ANIM_ATTACK, true, store, true);
+                    if (keepAttack && !isNpcSummon) {
+                        animator.setBaseAnim(summonUuid, summonRef, ANIM_ATTACK, true, store, true);
+                    }
+                    if (DEBUG_TARGETING && shouldLog(dt, summonUuid, summonId)) {
+                        dbg(summonUuid, summonId, "ATTACK_MODE enabled (no stagger).");
                     }
                 }
                 startDelayBySummon.put(summonUuid, 0f);
@@ -259,6 +388,7 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
             startDelayBySummon.put(summonUuid, 0f);
         }
 
+        // Cooldowns
         float atkCd = attackCooldownBySummon.getOrDefault(summonUuid, 0f);
         atkCd = Math.max(0f, atkCd - dt);
         attackCooldownBySummon.put(summonUuid, atkCd);
@@ -270,31 +400,58 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
             if (pd <= 0f) {
                 applyPendingDamageNow(
                         summonUuid, ownerRef, store, cb,
-                        world, cur, ownerEye,
+                        world, summonT.getPosition(), ownerEye,
                         requireOwnerLoS, requireSummonLoS,
                         hitDamage
                 );
             }
         }
 
+        // ======================
+        // TARGET MODE
+        // ======================
         if (targetRef != null && targetRef.isValid()) {
             TransformComponent targetT = store.getComponent(targetRef, TransformComponent.getComponentType());
-            if (targetT == null) {
+
+            if (!SummonTargeting.isAlive(targetRef, store)) {
+                focusTargetByOwner.remove(ownerUuid);
                 dropSummonTarget(summonUuid);
-                setBaseAnim(summonUuid, summonRef, ANIM_MOVE, true, store, false);
-                faceOwner(summonT, ownerRotObj, yawRad, controller);
-                moveTowards(dt, cur, home, followSpeed, summonT);
+                // if (isNpcSummon) MOVE_NPC.setDesiredPointIfSupported(store, cb, summonRef, home, yawRad, 0);
+                return;
+            }
+
+            if (targetT == null) {
+                if (DEBUG_TARGETING && shouldLog(dt, summonUuid, summonId)) {
+                    dbg(summonUuid, summonId, "TARGET missing TransformComponent -> drop target.");
+                }
+                dropSummonTarget(summonUuid);
+                animator.setBaseAnim(summonUuid, summonRef, ANIM_MOVE, true, store, false);
+
+                if (isNpcSummon) {
+                    movementFollow.setDesiredPointIfSupported(store, cb, summonRef, home, yawRad, 0);
+                } else {
+                    movementFollow.faceOwner(summonT, ownerRot, yawRad, controller);
+                    movementFollow.moveTowards(dt, cur, home, followSpeed, summonT);
+                }
                 return;
             }
 
             Vector3d tp = targetT.getPosition();
 
-            if (!passesLoS(world, cur, ownerEye, tp, requireOwnerLoS, requireSummonLoS)) {
+            if (!SummonTargeting.passesLoS(world, summonT.getPosition(), ownerEye, tp, requireOwnerLoS, requireSummonLoS)) {
+                if (DEBUG_TARGETING && shouldLog(dt, summonUuid, summonId)) {
+                    dbg(summonUuid, summonId, "LoS failed -> drop target.");
+                }
                 focusTargetByOwner.remove(ownerUuid);
                 dropSummonTarget(summonUuid);
-                setBaseAnim(summonUuid, summonRef, ANIM_MOVE, true, store, true);
-                faceOwner(summonT, ownerRotObj, yawRad, controller);
-                moveTowards(dt, cur, home, followSpeed, summonT);
+                animator.setBaseAnim(summonUuid, summonRef, ANIM_MOVE, true, store, true);
+
+                if (isNpcSummon) {
+                    movementFollow.setDesiredPointIfSupported(store, cb, summonRef, home, yawRad, 0);
+                } else {
+                    movementFollow.faceOwner(summonT, ownerRot, yawRad, controller);
+                    movementFollow.moveTowards(dt, cur, home, followSpeed, summonT);
+                }
                 return;
             }
 
@@ -304,52 +461,98 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
                     Math.max(1, tag.globalTotal)
             );
 
-            moveTowards(dt, cur, anchor, travelToTargetSpeed, summonT);
+            if (shouldLog(dt, summonUuid, summonId) && DEBUG_MOVEMENT) {
+                double hogAnchor = SummonTargeting.heightOverGround(world, anchor, 128);
+                dbg(summonUuid, summonId,
+                        String.format(Locale.ROOT,
+                                "ANCHOR (%.2f %.2f %.2f) HoG=%.2f | target=(%.2f %.2f %.2f) distToAnchor=%.2f",
+                                anchor.x, anchor.y, anchor.z, hogAnchor,
+                                tp.x, tp.y, tp.z,
+                                Math.sqrt(distSq(anchor, summonT.getPosition()))
+                        )
+                );
+            }
 
             boolean attackMode = Boolean.TRUE.equals(attackModeBySummon.get(summonUuid));
-            if (KEEP_ATTACK_WHILE_HAS_TARGET && attackMode)
-                setBaseAnim(summonUuid, summonRef, ANIM_ATTACK, true, store, false);
-            else setBaseAnim(summonUuid, summonRef, ANIM_MOVE, true, store, false);
 
+            // ✅ AQUI ESTÁ TU IDEA: si es NPC, en combate se mueve EXACTO como no-NPC (Transform LERP a anchor)
+            SummonMovement combatMove = MOVE_LERP;
+
+            // mover hacia la formación del target (anchor)
+            Vector3d before = summonT.getPosition();
+            combatMove.moveTowards(dt, before, anchor, travelToTargetSpeed, summonT);
+
+            // animación base: solo para no-NPC (para NPC la animación va aparte)
+            if (!isNpcSummon) {
+                if (keepAttack && attackMode) animator.setBaseAnim(summonUuid, summonRef, ANIM_ATTACK, true, store, false);
+                else animator.setBaseAnim(summonUuid, summonRef, ANIM_MOVE, true, store, false);
+            }
+
+            // schedule daño igual que no-NPC (solo si realmente llegó al anchor)
             if (attackMode
                     && pendingDamageTargetBySummon.get(summonUuid) == null
                     && pendingDamageDelayBySummon.getOrDefault(summonUuid, 0f) <= 0f
                     && attackCooldownBySummon.getOrDefault(summonUuid, 0f) <= 0f) {
 
-                double dx = anchor.x - summonT.getPosition().x;
-                double dy = anchor.y - summonT.getPosition().y;
-                double dz = anchor.z - summonT.getPosition().z;
-                double distSq = dx * dx + dy * dy + dz * dz;
-
-                if (distSq <= (hitDistance * hitDistance)) {
+                double d2 = distSq(anchor, summonT.getPosition());
+                if (d2 <= (hitDistance * hitDistance)) {
                     if (store.getComponent(targetRef, NetworkId.getComponentType()) != null) {
                         pendingDamageTargetBySummon.put(summonUuid, targetRef);
-                        pendingDamageDelayBySummon.put(summonUuid, HIT_DAMAGE_DELAY_SEC);
-                        attackCooldownBySummon.put(summonUuid, ATTACK_INTERVAL_SEC);
-                        setBaseAnim(summonUuid, summonRef, ANIM_ATTACK, true, store, true);
+                        pendingDamageDelayBySummon.put(summonUuid, hitDelay);
+                        attackCooldownBySummon.put(summonUuid, attackInterval);
+
+                        if (DEBUG_DAMAGE && shouldLog(dt, summonUuid, summonId)) {
+                            dbg(summonUuid, summonId, String.format(Locale.ROOT,
+                                    "DAMAGE scheduled in %.2fs (atkCd=%.2fs) hitDist=%.2f",
+                                    hitDelay, attackInterval, Math.sqrt(d2)));
+                        }
+
+                        if (!isNpcSummon) animator.setBaseAnim(summonUuid, summonRef, ANIM_ATTACK, true, store, true);
                     } else {
                         attackCooldownBySummon.put(summonUuid, 0.10f);
                     }
+                } else if (DEBUG_DAMAGE && shouldLog(dt, summonUuid, summonId)) {
+                    dbg(summonUuid, summonId, String.format(Locale.ROOT,
+                            "DAMAGE not scheduled (too far). dist=%.2f hitDistance=%.2f",
+                            Math.sqrt(d2), hitDistance));
                 }
             }
 
-            faceTargetLook(summonT, summonT.getPosition(), tp);
+            // facing: para no-NPC (y opcionalmente NPC para orientación visual)
+            combatMove.faceTarget(summonT, summonT.getPosition(), tp);
+
+            // 🔒 MUY IMPORTANTE: si es NPC, sincronizamos leash point a su posición actual para que el Role no meta drift/inercia rara
+            if (isNpcSummon) {
+                float yawTo = yawRadTo(summonT.getPosition(), tp);
+                float pitchTo = pitchRadTo(summonT.getPosition(), tp);
+                MOVE_NPC.setDesiredPointIfSupported(store, cb, summonRef, summonT.getPosition(), yawTo, pitchTo);
+            }
+
             return;
         }
 
+        // ======================
+        // NO TARGET: go home
+        // ======================
         dropSummonTarget(summonUuid);
 
-        Vector3d dHome = new Vector3d(home.x - cur.x, home.y - cur.y, home.z - cur.z);
-        boolean returning = (dHome.x * dHome.x + dHome.y * dHome.y + dHome.z * dHome.z) > 0.02;
+        boolean returning = distSq(home, cur) > 0.02;
 
-        setBaseAnim(summonUuid, summonRef, returning ? ANIM_MOVE : ANIM_IDLE, true, store, false);
-        faceOwner(summonT, ownerRotObj, yawRad, controller);
-        moveTowards(dt, cur, home, followSpeed, summonT);
+        if (!isNpcSummon) {
+            animator.setBaseAnim(summonUuid, summonRef, returning ? ANIM_MOVE : ANIM_IDLE, true, store, false);
+            movementFollow.faceOwner(summonT, ownerRot, yawRad, controller);
+            movementFollow.moveTowards(dt, cur, home, followSpeed, summonT);
+        } else {
+            // NPC follow/idle (NO lo tocamos como pediste)
+            movementFollow.setDesiredPointIfSupported(store, cb, summonRef, home, yawRad, 0);
+        }
     }
 
+    // =======================
+    // Owner maintenance
+    // =======================
     private void enforceSlotsAndRebuild(Store<EntityStore> store, CommandBuffer<EntityStore> cb, Ref<EntityStore> ownerRef, UUID ownerUuid) {
         int capSlots = SummonStats.getMaxSlots(store, ownerRef);
-
         ArrayList<Ref<EntityStore>> refs = new ArrayList<>();
 
         Query<EntityStore> q = Query.and(
@@ -365,8 +568,7 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
             for (int i = 0; i < chunk.size(); i++) {
                 SummonTag t = chunk.getComponent(i, summonTagType);
                 if (t == null || !ownerUuid.equals(t.owner)) continue;
-                Ref<EntityStore> r = chunk.getReferenceTo(i);
-                refs.add(r);
+                refs.add(chunk.getReferenceTo(i));
             }
         });
 
@@ -375,7 +577,6 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
             if (t != null) usedSlots += Math.max(0, t.slotCost);
         }
 
-        // Remove newest last until under cap
         refs.sort((a, b) -> {
             SummonTag ta = store.getComponent(a, summonTagType);
             SummonTag tb = store.getComponent(b, summonTagType);
@@ -394,22 +595,25 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
         SummonIndexing.rebuildOwnerIndices(store, cb, summonTagType, ownerUuid, refs);
 
         Ref<EntityStore> focus = focusTargetByOwner.get(ownerUuid);
-        if (focus != null && (!focus.isValid() || !isAlive(focus, store))) {
+        if (focus != null && (!focus.isValid() || !SummonTargeting.isAlive(focus, store))) {
             focusTargetByOwner.remove(ownerUuid);
         }
     }
 
-    private boolean tryRunOwnerMaintenance(float dt, UUID ownerUuid) {
+    private boolean tryRunOwnerMaintenance(float dt, UUID ownerUuid, float ownerMaintenanceCdParam) {
         float cd = ownerMaintenanceCooldown.getOrDefault(ownerUuid, 0f);
         cd = Math.max(0f, cd - dt);
         if (cd > 0f) {
             ownerMaintenanceCooldown.put(ownerUuid, cd);
             return false;
         }
-        ownerMaintenanceCooldown.put(ownerUuid, 0.35f);
+        ownerMaintenanceCooldown.put(ownerUuid, ownerMaintenanceCdParam);
         return true;
     }
 
+    // =======================
+    // Targeting
+    // =======================
     private Ref<EntityStore> getOrUpdateSummonTarget(
             UUID summonUuid,
             UUID ownerUuid,
@@ -424,135 +628,44 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
             boolean requireSummonLoS
     ) {
         Ref<EntityStore> current = lastTargetBySummon.get(summonUuid);
-        if (current != null && current.isValid() && isAlive(current, store)) {
+        if (current != null && current.isValid() && SummonTargeting.isAlive(current, store)) {
             TransformComponent t = store.getComponent(current, TransformComponent.getComponentType());
             if (t != null) {
                 Vector3d tp = t.getPosition();
-                if (isWithin(summonPos, tp, radius) && passesLoS(world, summonPos, ownerEye, tp, requireOwnerLoS, requireSummonLoS)) {
+                if (isWithin(summonPos, tp, radius)
+                        && SummonTargeting.passesLoS(world, summonPos, ownerEye, tp, requireOwnerLoS, requireSummonLoS)) {
                     return current;
                 }
             }
         }
 
-        if (preferred != null && preferred.isValid() && isAlive(preferred, store)) {
-
-            // Only accept hostile targets (strict)
-            if (isAllowedTargetHostileOnly(store, ownerRef, preferred)
+        if (preferred != null && preferred.isValid() && SummonTargeting.isAlive(preferred, store)) {
+            if (SummonTargeting.isAllowedTargetHostileOnly(store, ownerRef, preferred, types)
                     && !preferred.equals(ownerRef)
-                    && store.getComponent(preferred, summonTagType) == null
                     && store.getComponent(preferred, NetworkId.getComponentType()) != null) {
 
                 TransformComponent pt = store.getComponent(preferred, TransformComponent.getComponentType());
                 if (pt != null) {
                     Vector3d pp = pt.getPosition();
-
                     if (isWithin(summonPos, pp, radius)
-                            && passesLoS(world, summonPos, ownerEye, pp, requireOwnerLoS, requireSummonLoS)) {
+                            && SummonTargeting.passesLoS(world, summonPos, ownerEye, pp, requireOwnerLoS, requireSummonLoS)) {
                         return preferred;
                     }
                 }
             }
         }
 
-
-        Ref<EntityStore> next = findClosestAliveVisibleInSphere(
-                summonPos, ownerEye, radius, store, world, ownerRef, requireOwnerLoS, requireSummonLoS
+        return SummonTargeting.findClosestAliveVisibleInSphere(
+                summonPos, ownerEye, radius,
+                store, world, ownerRef,
+                types, requireOwnerLoS, requireSummonLoS,
+                summonTagType
         );
-
-        if (next != null) {
-            Ref<EntityStore> f = focusTargetByOwner.get(ownerUuid);
-            if (f == null || !f.isValid() || !isAlive(f, store)) {
-                focusTargetByOwner.put(ownerUuid, next);
-            }
-        }
-
-        return next;
     }
 
-    @Nullable
-    private Ref<EntityStore> findClosestAliveVisibleInSphere(
-            Vector3d center,
-            Vector3d ownerEye,
-            double radius,
-            Store<EntityStore> store,
-            World world,
-            Ref<EntityStore> ownerRef,
-            boolean requireOwnerLoS,
-            boolean requireSummonLoS
-    ) {
-        List<Ref<EntityStore>> list = TargetUtil.getAllEntitiesInSphere(center, radius, store);
-
-        Ref<EntityStore> best = null;
-        double bestD2 = Double.MAX_VALUE;
-
-        for (Ref<EntityStore> r : list) {
-            if (r == null || !r.isValid()) continue;
-            if (r.equals(ownerRef)) continue;
-            if (store.getComponent(r, summonTagType) != null) continue;
-            if (store.getComponent(r, NetworkId.getComponentType()) == null) continue;
-
-            if (!isAllowedTargetHostileOnly(store, ownerRef, r)) continue;
-
-            TransformComponent t = store.getComponent(r, TransformComponent.getComponentType());
-            if (t == null) continue;
-            if (!isAlive(r, store)) continue;
-
-            Vector3d p = t.getPosition();
-            if (!passesLoS(world, center, ownerEye, p, requireOwnerLoS, requireSummonLoS)) continue;
-
-            double dx = p.x - center.x, dy = p.y - center.y, dz = p.z - center.z;
-            double d2 = dx * dx + dy * dy + dz * dz;
-            if (d2 < bestD2) {
-                bestD2 = d2;
-                best = r;
-            }
-        }
-
-        return best;
-    }
-
-    private boolean passesLoS(World world, Vector3d summonPos, Vector3d ownerEye, Vector3d targetPos, boolean requireOwnerLoS, boolean requireSummonLoS) {
-        if (requireSummonLoS && !hasLineOfSight(world, summonPos, targetPos)) return false;
-        if (requireOwnerLoS && !hasLineOfSight(world, ownerEye, targetPos)) return false;
-        return true;
-    }
-
-    private boolean hasLineOfSight(World world, Vector3d from, Vector3d to) {
-        double dx = to.x - from.x;
-        double dy = to.y - from.y;
-        double dz = to.z - from.z;
-
-        double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (dist <= 0.25) return true;
-
-        double inv = 1.0 / dist;
-        double dirX = dx * inv;
-        double dirY = dy * inv;
-        double dirZ = dz * inv;
-
-        return TargetUtil.getTargetBlock(
-                world,
-                (blockId, fluidId) -> blockId != 0,
-                from.x, from.y, from.z,
-                dirX, dirY, dirZ,
-                Math.max(0.0, dist - 0.10)
-        ) == null;
-    }
-
-    private void dropSummonTarget(UUID summonUuid) {
-        attackModeBySummon.put(summonUuid, false);
-        startDelayBySummon.put(summonUuid, 0f);
-        attackCooldownBySummon.put(summonUuid, 0f);
-        pendingDamageTargetBySummon.remove(summonUuid);
-        pendingDamageDelayBySummon.put(summonUuid, 0f);
-        lastTargetBySummon.remove(summonUuid);
-    }
-
-    private boolean isWithin(Vector3d a, Vector3d b, double radius) {
-        double dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
-        return dx * dx + dy * dy + dz * dz <= radius * radius;
-    }
-
+    // =======================
+    // Combat + helpers
+    // =======================
     private void applyPendingDamageNow(
             UUID summonUuid,
             Ref<EntityStore> ownerRef,
@@ -570,223 +683,344 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
 
         if (hitDamage <= 0f) return;
         if (targetRef == null || !targetRef.isValid()) return;
-        if (!isAlive(targetRef, store)) return;
+        if (!SummonTargeting.isAlive(targetRef, store)) return;
         if (store.getComponent(targetRef, NetworkId.getComponentType()) == null) return;
 
         TransformComponent targetT = store.getComponent(targetRef, TransformComponent.getComponentType());
         if (targetT == null) return;
 
         Vector3d tp = targetT.getPosition();
-        if (!passesLoS(world, summonPosNow, ownerEye, tp, requireOwnerLoS, requireSummonLoS)) {
+        if (!SummonTargeting.passesLoS(world, summonPosNow, ownerEye, tp, requireOwnerLoS, requireSummonLoS)) {
             attackCooldownBySummon.put(summonUuid, 0.15f);
             return;
+        }
+
+        if (DEBUG_DAMAGE && shouldLog(0f, summonUuid, null)) {
+            dbg(summonUuid, null, "DAMAGE apply now. amount=" + hitDamage);
         }
 
         Damage damage = new Damage(new Damage.EntitySource(ownerRef), 1, hitDamage);
         cb.invoke(targetRef, damage);
     }
 
-    private float computeStartStagger(int idx, int count) {
-        float step = ATTACK_INTERVAL_SEC / Math.max(1, count);
+    private void dropSummonTarget(UUID summonUuid) {
+        attackModeBySummon.put(summonUuid, false);
+        startDelayBySummon.put(summonUuid, 0f);
+        attackCooldownBySummon.put(summonUuid, 0f);
+        pendingDamageTargetBySummon.remove(summonUuid);
+        pendingDamageDelayBySummon.put(summonUuid, 0f);
+        lastTargetBySummon.remove(summonUuid);
+    }
+
+    private static float computeStartStagger(int idx, int count, float attackInterval) {
+        float step = attackInterval / Math.max(1, count);
         return step * Math.max(0, idx);
     }
 
-    private void moveTowards(float dt, Vector3d cur, Vector3d target, double speed, TransformComponent t) {
-        double alpha = Math.min(1.0, dt * speed);
-        if (alpha > 1.0) alpha = 1.0;
-        t.setPosition(new Vector3d(
-                cur.x + (target.x - cur.x) * alpha,
-                cur.y + (target.y - cur.y) * alpha,
-                cur.z + (target.z - cur.z) * alpha
-        ));
+    private static boolean isWithin(Vector3d a, Vector3d b, double radius) {
+        return distSq(a, b) <= radius * radius;
     }
 
-    private boolean isAlive(Ref<EntityStore> ref, Store<EntityStore> store) {
-        EntityStatMap statMap = store.getComponent(ref, EntityStatMap.getComponentType());
-        if (statMap == null) return true;
-
-        float hp = readHealthSafe(statMap);
-        if (Float.isNaN(hp)) return true;
-        return hp > 0.001f;
-    }
-
-    private float readHealthSafe(EntityStatMap statMap) {
-        var v8 = statMap.get(8);
-        if (v8 != null && "Health".equals(v8.getId())) {
-            cachedHealthIndex = 8;
-            return v8.get();
-        }
-
-        if (cachedHealthIndex < 0) {
-            int idx = EntityStatType.getAssetMap().getIndex("Health");
-            if (idx >= 0) cachedHealthIndex = idx;
-        }
-
-        if (cachedHealthIndex >= 0) {
-            var v = statMap.get(cachedHealthIndex);
-            if (v != null) return v.get();
-        }
-
-        for (int idx = 0; idx < statMap.size(); idx++) {
-            var v = statMap.get(idx);
-            if (v == null) continue;
-            String sid = v.getId();
-            if (sid == null) continue;
-            String low = sid.toLowerCase(Locale.ROOT);
-            if (low.contains("health") || low.contains("hp")) {
-                cachedHealthIndex = idx;
-                return v.get();
-            }
-        }
-
-        return Float.NaN;
-    }
-
-    private void setBaseAnim(UUID summonUuid, Ref<EntityStore> summonRef, String animSetId, boolean loop, Store<EntityStore> store, boolean forceReplay) {
-        String key = animSetId + "|" + (loop ? "1" : "0");
-        String last = lastBaseKeyBySummon.get(summonUuid);
-
-        if (forceReplay) {
-            lastBaseKeyBySummon.remove(summonUuid);
-            last = null;
-        }
-
-        if (last == null || !last.equals(key)) {
-            AnimationUtils.playAnimation(summonRef, SLOT_BASE, animSetId, loop, store);
-            lastBaseKeyBySummon.put(summonUuid, key);
-        }
+    private static double distSq(Vector3d a, Vector3d b) {
+        double dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+        return dx * dx + dy * dy + dz * dz;
     }
 
     private static AnimationSlot resolveSlot(String... names) {
         for (String n : names) {
             try {
                 return AnimationSlot.valueOf(n);
-            } catch (Throwable ignored) {
-            }
+            } catch (Throwable ignored) {}
         }
         return AnimationSlot.values()[0];
     }
 
-    private void faceOwner(
-            TransformComponent t,
-            Object ownerRotation,
-            double ownerYawRad,
-            ModelFollowController controller
-    ) {
-        double minPitch = -0.6;
-        double maxPitch = 0.55;
-        if (controller instanceof me.s3b4s5.summonlib.api.follow.OwnerPitchClamp pc) {
-            // We'll use pc.clampOwnerPitch(...) below, keep defaults only as fallback.
+    private void cleanupSummonState(UUID summonUuid, UUID ownerUuid) {
+        lastTargetBySummon.remove(summonUuid);
+        startDelayBySummon.remove(summonUuid);
+        attackCooldownBySummon.remove(summonUuid);
+        pendingDamageDelayBySummon.remove(summonUuid);
+        pendingDamageTargetBySummon.remove(summonUuid);
+        attackModeBySummon.remove(summonUuid);
+
+        focusTargetByOwner.remove(ownerUuid);
+        ownerMaintenanceCooldown.remove(ownerUuid);
+
+        debugCdBySummon.remove(summonUuid);
+        introLogged.remove(summonUuid);
+    }
+
+    // =======================
+    // DEBUG HELPERS
+    // =======================
+    private boolean shouldLog(float dt, UUID summonUuid, @Nullable String summonId) {
+        if (!DEBUG) return false;
+        if (DEBUG_ONLY_SUMMON_ID != null && summonId != null && !DEBUG_ONLY_SUMMON_ID.equals(summonId)) return false;
+
+        float cd = debugCdBySummon.getOrDefault(summonUuid, 0f);
+        cd = Math.max(0f, cd - dt);
+        if (cd > 0f) {
+            debugCdBySummon.put(summonUuid, cd);
+            return false;
+        }
+        debugCdBySummon.put(summonUuid, DEBUG_LOG_PERIOD_SEC);
+        return true;
+    }
+
+    private void dbg(UUID summonUuid, @Nullable String summonId, String msg) {
+        if (!DEBUG) return;
+        if (DEBUG_ONLY_SUMMON_ID != null && summonId != null && !DEBUG_ONLY_SUMMON_ID.equals(summonId)) return;
+        ((HytaleLogger.Api) LOGGER.atInfo()).log("[SummonCombatFollowSystem] [%s] %s", shortId(summonUuid), msg);
+    }
+
+    private void dbgOncePerSummon(float dt, UUID summonUuid, @Nullable String summonId, String msg) {
+        if (!DEBUG) return;
+        if (shouldLog(dt, summonUuid, summonId)) {
+            dbg(summonUuid, summonId, msg);
+        }
+    }
+
+    private static String shortId(UUID u) {
+        String s = String.valueOf(u);
+        return (s.length() <= 8) ? s : s.substring(0, 8);
+    }
+
+    private void runSelfTests() {
+        try {
+            ((HytaleLogger.Api) LOGGER.atInfo()).log("[SummonCombatFollowSystem] SELF-TEST start. SLOT_BASE=%s", String.valueOf(SLOT_BASE));
+            ((HytaleLogger.Api) LOGGER.atInfo()).log("[SummonCombatFollowSystem] SELF-TEST NPCEntity leash methods check...");
+            for (String m : new String[]{"getLeashPoint", "setLeashHeading", "setLeashPitch"}) {
+                boolean found = false;
+                for (Method mm : NPCEntity.class.getMethods()) {
+                    if (mm.getName().equals(m)) { found = true; break; }
+                }
+                ((HytaleLogger.Api) LOGGER.atInfo()).log("[SummonCombatFollowSystem]  NPCEntity.%s -> %s", m, found ? "FOUND" : "NOT FOUND");
+            }
+            ((HytaleLogger.Api) LOGGER.atInfo()).log("[SummonCombatFollowSystem] SELF-TEST summonTagType=%s", String.valueOf(summonTagType));
+            ((HytaleLogger.Api) LOGGER.atInfo()).log("[SummonCombatFollowSystem] SELF-TEST TargetUtil.getTargetBlock available -> %s",
+                    (TargetUtil.class.getMethods().length > 0));
+            ((HytaleLogger.Api) LOGGER.atInfo()).log("[SummonCombatFollowSystem] SELF-TEST done.");
+        } catch (Throwable t) {
+            ((HytaleLogger.Api) LOGGER.atWarning()).log("[SummonCombatFollowSystem] SELF-TEST failed: %s", String.valueOf(t));
+            if (DEBUG_STACKTRACE) t.printStackTrace();
+        }
+    }
+
+    // =======================
+    // Inner abstractions (compile-friendly)
+    // =======================
+    private interface SummonMovement {
+        void moveTowards(float dt, Vector3d cur, Vector3d target, double speed, TransformComponent t);
+        void faceOwner(TransformComponent t, Vector3f ownerRot, double ownerYawRad, ModelFollowController controller);
+        void faceTarget(TransformComponent t, Vector3d from, Vector3d to);
+        default void setDesiredPointIfSupported(Store<EntityStore> store, CommandBuffer<EntityStore> cb, Ref<EntityStore> summonRef, Vector3d desired, double yawRad, double pitchRad) {}
+    }
+
+    private static final class LerpTransformMovement implements SummonMovement {
+        @Override
+        public void moveTowards(float dt, Vector3d cur, Vector3d target, double speed, TransformComponent t) {
+            double alpha = Math.min(1.0, dt * speed);
+            t.setPosition(new Vector3d(
+                    cur.x + (target.x - cur.x) * alpha,
+                    cur.y + (target.y - cur.y) * alpha,
+                    cur.z + (target.z - cur.z) * alpha
+            ));
         }
 
-        // Try to preserve owner's yaw/roll but clamp pitch.
-        if (ownerRotation instanceof com.hypixel.hytale.math.vector.Vector3f v) {
-            float pitch = v.getPitch();
-            float yaw = v.getYaw();
-            float roll = v.getRoll();
+        @Override
+        public void faceOwner(TransformComponent t, Vector3f ownerRot, double ownerYawRad, ModelFollowController controller) {
+            float pitch = ownerRot.getPitch();
+            float yaw = ownerRot.getYaw();
 
-            double clamped = (controller instanceof me.s3b4s5.summonlib.api.follow.OwnerPitchClamp pc)
-                    ? pc.clampOwnerPitch(pitch)
-                    : clamp(pitch, minPitch, maxPitch);
+            double minPitch = -0.6;
+            double maxPitch = 0.55;
+            double clamped = clamp(pitch, minPitch, maxPitch);
 
-            var rot = t.getRotation();
+            Vector3f rot = t.getRotation();
             rot.setPitch((float) clamped);
             rot.setYaw(yaw);
-            rot.setRoll(roll);
-            return;
+            rot.setRoll(0f);
         }
 
-        // Fallback: yaw only, no pitch.
-        var rot = t.getRotation();
-        rot.setPitch(0f);
-        rot.setYaw((float) ownerYawRad);
-        rot.setRoll(0f);
+        @Override
+        public void faceTarget(TransformComponent t, Vector3d from, Vector3d to) {
+            double vx = to.x - from.x;
+            double vz = to.z - from.z;
+            float yawRad = (float) Math.atan2(-vx, -vz);
+            Vector3f rot = t.getRotation();
+            rot.setPitch(0f);
+            rot.setYaw(yawRad);
+            rot.setRoll(0f);
+        }
+
+        private static double clamp(double v, double a, double b) {
+            return (v < a) ? a : (v > b) ? b : v;
+        }
+    }
+
+    private final class NpcLeashMovement implements SummonMovement {
+        private volatile Method mGetLeashPoint;
+        private volatile Method mSetLeashHeading;
+        private volatile Method mSetLeashPitch;
+
+        @Override public void moveTowards(float dt, Vector3d cur, Vector3d target, double speed, TransformComponent t) {}
+        @Override public void faceOwner(TransformComponent t, Vector3f ownerRot, double ownerYawRad, ModelFollowController controller) {}
+        @Override public void faceTarget(TransformComponent t, Vector3d from, Vector3d to) {}
+
+        @Override
+        public void setDesiredPointIfSupported(Store<EntityStore> store, CommandBuffer<EntityStore> cb, Ref<EntityStore> summonRef, Vector3d desired, double yawRad, double pitchRad) {
+            NPCEntity npc = store.getComponent(summonRef, NPCEntity.getComponentType());
+            if (npc == null) return;
+
+            try {
+                ensureMethods();
+
+                Object leashPoint = (mGetLeashPoint != null) ? mGetLeashPoint.invoke(npc) : null;
+                boolean wrote = false;
+
+                if (leashPoint != null) {
+                    Method assign = findMethod(leashPoint.getClass(), "assign", Vector3d.class);
+                    if (assign != null) {
+                        assign.setAccessible(true);
+                        assign.invoke(leashPoint, desired);
+                        wrote = true;
+                    } else {
+                        wrote = tryWriteXYZFields(leashPoint, desired);
+                    }
+                }
+
+                if (mSetLeashHeading != null) {
+                    try { mSetLeashHeading.invoke(npc, (float) yawRad); } catch (Throwable ignored) {}
+                }
+                if (mSetLeashPitch != null) {
+                    try { mSetLeashPitch.invoke(npc, (float) pitchRad); } catch (Throwable ignored) {}
+                }
+
+                if (DEBUG && DEBUG_NPC_LEASH) {
+                    UUIDComponent uc = store.getComponent(summonRef, UUIDComponent.getComponentType());
+                    UUID id = (uc != null) ? uc.getUuid() : null;
+                    if (id != null && shouldLog(0f, id, DEBUG_ONLY_SUMMON_ID)) {
+                        ((HytaleLogger.Api) LOGGER.atInfo()).log("[SummonCombatFollowSystem] [NPC-LEASH] wrote=%s desired=(%.2f %.2f %.2f)",
+                                wrote, desired.x, desired.y, desired.z);
+                    }
+                }
+
+            } catch (Throwable t) {
+                if (DEBUG && DEBUG_NPC_LEASH) {
+                    ((HytaleLogger.Api) LOGGER.atWarning()).log("[SummonCombatFollowSystem] [NPC-LEASH] failed: %s", String.valueOf(t));
+                }
+                if (DEBUG_STACKTRACE) t.printStackTrace();
+            }
+        }
+
+        private void ensureMethods() {
+            if (mGetLeashPoint == null) {
+                mGetLeashPoint = findMethod(NPCEntity.class, "getLeashPoint");
+                if (mGetLeashPoint != null) mGetLeashPoint.setAccessible(true);
+            }
+            if (mSetLeashHeading == null) {
+                mSetLeashHeading = findMethod(NPCEntity.class, "setLeashHeading", float.class);
+                if (mSetLeashHeading != null) mSetLeashHeading.setAccessible(true);
+            }
+            if (mSetLeashPitch == null) {
+                mSetLeashPitch = findMethod(NPCEntity.class, "setLeashPitch", float.class);
+                if (mSetLeashPitch != null) mSetLeashPitch.setAccessible(true);
+            }
+        }
+
+        @Nullable
+        private Method findMethod(Class<?> c, String name, Class<?>... params) {
+            try { return c.getMethod(name, params); } catch (Throwable ignored) {}
+            try { return c.getDeclaredMethod(name, params); } catch (Throwable ignored) {}
+            return null;
+        }
+
+        private boolean tryWriteXYZFields(Object leashPoint, Vector3d desired) {
+            try {
+                Field fx = findField(leashPoint.getClass(), "x");
+                Field fy = findField(leashPoint.getClass(), "y");
+                Field fz = findField(leashPoint.getClass(), "z");
+                if (fx == null || fy == null || fz == null) return false;
+                fx.setAccessible(true); fy.setAccessible(true); fz.setAccessible(true);
+                fx.setDouble(leashPoint, desired.x);
+                fy.setDouble(leashPoint, desired.y);
+                fz.setDouble(leashPoint, desired.z);
+                return true;
+            } catch (Throwable ignored) {
+                return false;
+            }
+        }
+
+        @Nullable
+        private Field findField(Class<?> c, String name) {
+            try { return c.getField(name); } catch (Throwable ignored) {}
+            try { return c.getDeclaredField(name); } catch (Throwable ignored) {}
+            return null;
+        }
+    }
+
+    private interface SummonAnimator {
+        void setBaseAnim(UUID summonUuid, Ref<EntityStore> summonRef, String animSetId, boolean loop, Store<EntityStore> store, boolean forceReplay);
+    }
+
+    private static final class DefaultSummonAnimator implements SummonAnimator {
+        private final AnimationSlot slot;
+        private final ConcurrentHashMap<UUID, String> lastKey = new ConcurrentHashMap<>();
+
+        private DefaultSummonAnimator(AnimationSlot slot) {
+            this.slot = slot;
+        }
+
+        @Override
+        public void setBaseAnim(UUID summonUuid, Ref<EntityStore> summonRef, String animSetId, boolean loop, Store<EntityStore> store, boolean forceReplay) {
+            String key = animSetId + "|" + (loop ? "1" : "0");
+            String last = lastKey.get(summonUuid);
+
+            if (forceReplay) {
+                lastKey.remove(summonUuid);
+                last = null;
+            }
+
+            if (last == null || !last.equals(key)) {
+                try {
+                    com.hypixel.hytale.server.core.entity.AnimationUtils.playAnimation(summonRef, slot, animSetId, loop, store);
+                } catch (Throwable ignored) {}
+                lastKey.put(summonUuid, key);
+            }
+        }
+    }
+
+    private static final class NoopSummonAnimator implements SummonAnimator {
+        @Override
+        public void setBaseAnim(UUID summonUuid, Ref<EntityStore> summonRef, String animSetId, boolean loop, Store<EntityStore> store, boolean forceReplay) { }
     }
 
     private static double clamp(double v, double a, double b) {
         return (v < a) ? a : (v > b) ? b : v;
     }
 
+    private static Vector3d applyOwnerHoverYOffset(Vector3d ownerPos, Vector3d point, double hoverAboveOwner, double maxAboveOwner) {
+        double desiredY = ownerPos.y + hoverAboveOwner;
+        double maxY = ownerPos.y + maxAboveOwner;
+        if (desiredY > maxY) desiredY = maxY;
+        return new Vector3d(point.x, desiredY, point.z);
+    }
 
-    private void faceTargetLook(TransformComponent t, Vector3d from, Vector3d to) {
+    private static float yawRadTo(Vector3d from, Vector3d to) {
         double vx = to.x - from.x;
         double vz = to.z - from.z;
-        float yawRad = (float) Math.atan2(-vx, -vz);
-        var rot = t.getRotation();
-        rot.setPitch(0f);
-        rot.setYaw(yawRad);
-        rot.setRoll(0f);
+        return (float) Math.atan2(-vx, -vz);
     }
 
-    private boolean isAllowedTargetHostileOnly(
-            Store<EntityStore> store,
-            Ref<EntityStore> ownerRef,
-            Ref<EntityStore> candidateRef
-    ) {
-        if (candidateRef == null || !candidateRef.isValid()) return false;
-
-        // Never target players
-        if (store.getArchetype(candidateRef).contains(PLAYER_TYPE)) return false;
-
-        // Only target NPCs (strict hostile-only)
-        NPCEntity npc = store.getComponent(candidateRef, NPC_TYPE);
-        if (npc == null) return false;
-
-        Role role = tryGetRoleFromNpc(npc);
-        if (role == null) return false;
-
-        Attitude a = tryGetAttitude(role, candidateRef, ownerRef, store);
-        return a == Attitude.HOSTILE;
+    private static float pitchRadTo(Vector3d from, Vector3d to) {
+        double dx = to.x - from.x;
+        double dy = to.y - from.y;
+        double dz = to.z - from.z;
+        double h = Math.sqrt(dx * dx + dz * dz);
+        if (h < 1e-6) return 0f;
+        float p = (float) Math.atan2(dy, h);
+        if (p < -1.2f) p = -1.2f;
+        if (p > 1.2f) p = 1.2f;
+        return p;
     }
-
-    private Role tryGetRoleFromNpc(NPCEntity npc) {
-        try {
-            // Any public no-arg method returning Role
-            for (Method m : npc.getClass().getMethods()) {
-                if (m.getParameterCount() != 0) continue;
-                if (!Role.class.isAssignableFrom(m.getReturnType())) continue;
-                Object r = m.invoke(npc);
-                if (r instanceof Role role) return role;
-            }
-        } catch (Throwable ignored) {
-        }
-
-        try {
-            // Any field of type Role (in case there is no getter)
-            for (Field f : npc.getClass().getDeclaredFields()) {
-                if (!Role.class.isAssignableFrom(f.getType())) continue;
-                f.setAccessible(true);
-                Object r = f.get(npc);
-                if (r instanceof Role role) return role;
-            }
-        } catch (Throwable ignored) {
-        }
-
-        return null;
-    }
-
-    private Attitude tryGetAttitude(Role role, Ref<EntityStore> selfRef, Ref<EntityStore> targetRef, ComponentAccessor<EntityStore> accessor) {
-        try {
-            Object ws = role.getWorldSupport();
-
-            // Try getAttitude(Ref, Ref, ComponentAccessor)
-            for (Method m : ws.getClass().getMethods()) {
-                if (!m.getName().equals("getAttitude")) continue;
-                if (m.getParameterCount() != 3) continue;
-
-                Class<?>[] p = m.getParameterTypes();
-                if (!Ref.class.isAssignableFrom(p[0])) continue;
-                if (!Ref.class.isAssignableFrom(p[1])) continue;
-                if (!p[2].isAssignableFrom(accessor.getClass()) && !ComponentAccessor.class.isAssignableFrom(p[2]))
-                    continue;
-
-                Object out = m.invoke(ws, selfRef, targetRef, accessor);
-                if (out instanceof Attitude a) return a;
-            }
-        } catch (Throwable ignored) {
-        }
-
-        return null;
-    }
-
 }
