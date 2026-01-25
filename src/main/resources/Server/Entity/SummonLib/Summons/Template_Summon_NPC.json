@@ -1,0 +1,41 @@
+{
+  "Type": "SummonConfig",
+  "SummonType": "NPC_ROLE",
+
+  "SlotCost": 1,
+  "Damage": 5.0,
+  "DetectRadius": 12.0,
+  "RequireOwnerLoS": true,
+  "RequireSummonLoS": true,
+
+  "NpcRoleId": "Summoned_Bat_Ally",
+  "ApplySeparation": true,
+  "DespawnTimerSeconds": 300,
+
+  "InitialModelScaleOverride": 1.0,
+  "DebugSpawnFactory": false,
+
+  "Tuning": {
+    "FollowSpeed": 10.0,
+    "TravelToTargetSpeed": 6.0,
+    "HitDistance": 1.0,
+    "HitDamageDelaySec": 0.18,
+    "AttackIntervalSec": 0.70,
+    "LeashSummonToOwner": 10.0,
+    "LeashTargetToOwner": 8.0,
+    "HoverAboveOwner": 6.0,
+    "MaxAboveOwner": 10.0,
+    "OwnerMaintenanceCooldownSec": 0.35
+  },
+
+  "FollowController": {
+    "BaseBack": 0.5,
+    "Radius": 1.8,
+    "SpreadDeg": 140.0,
+    "BaseHeight": 1.1,
+    "OrbitRadius": 1.2,
+    "AttackHeight": 0.6,
+    "MinPitchRad": -0.6,
+    "MaxPitchRad": 0.55
+  }
+}

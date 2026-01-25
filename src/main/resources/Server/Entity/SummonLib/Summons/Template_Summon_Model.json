@@ -1,0 +1,41 @@
+{
+  "Type": "SummonConfig",
+  "SummonType": "MODEL",
+
+  "SlotCost": 1,
+  "Damage": 6.0,
+  "DetectRadius": 8.0,
+  "RequireOwnerLoS": true,
+  "RequireSummonLoS": true,
+
+  "ModelAssets": [
+    "Example_A",
+    "Example_B",
+    "Example_C"
+  ],
+  "ModelScale": 2.0,
+
+  "Tuning": {
+    "FollowSpeed": 16.0,
+    "TravelToTargetSpeed": 10.0,
+    "HitDistance": 1.2,
+    "HitDamageDelaySec": 0.14,
+    "AttackIntervalSec": 0.45,
+    "LeashSummonToOwner": 10.0,
+    "LeashTargetToOwner": 8.0,
+    "HoverAboveOwner": 6.0,
+    "MaxAboveOwner": 10.0,
+    "OwnerMaintenanceCooldownSec": 0.35
+  },
+
+  "FollowController": {
+    "BaseBack": 0.4,
+    "Radius": 1.4,
+    "SpreadDeg": 120.0,
+    "BaseHeight": 0.8,
+    "OrbitRadius": 0.9,
+    "AttackHeight": 0.48,
+    "MinPitchRad": -0.34906584,
+    "MaxPitchRad": 0.43633232
+  }
+}

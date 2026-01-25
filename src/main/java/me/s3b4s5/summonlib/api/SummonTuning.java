@@ -1,117 +1,165 @@
 package me.s3b4s5.summonlib.api;
 
+import com.hypixel.hytale.codec.Codec;
+import com.hypixel.hytale.codec.ExtraInfo;
+import com.hypixel.hytale.codec.KeyedCodec;
+import com.hypixel.hytale.codec.builder.BuilderCodec;
+
 import javax.annotation.Nullable;
 
 /**
  * Tuning opcional por invocación (por SummonDefinition).
  * Defaults iguales a los hardcodes actuales del SummonCombatFollowSystem.
+ *
+ * Nota: esta versión es "asset friendly":
+ * - campos mutables (public) para que el BuilderCodec escriba fácil
+ * - herencia via Parent (appendInherited)
+ * - afterDecode aplica defensas/clamps (igual a tu build() anterior)
  */
 public final class SummonTuning {
 
     // (1) Movement
-    public final double followSpeed;            // volver a home (no-NPC)
-    public final double travelToTargetSpeed;    // ir a anchor (NPC y no-NPC)
-    public final double hitDistance;            // rango real para golpear
+    public double followSpeed = 16.0;            // volver a home (no-NPC)
+    public double travelToTargetSpeed = 10.0;    // ir a anchor (NPC y no-NPC)
+    public double hitDistance = 1.2;             // rango real para golpear
 
     // (2) Cadence / timings
-    public final float hitDamageDelaySec;       // delay entre “en rango” y daño
-    public final float attackIntervalSec;       // cooldown entre ataques
-    public final boolean keepAttackWhileHasTarget;
+    public float hitDamageDelaySec = 0.14f;      // delay entre “en rango” y daño
+    public float attackIntervalSec = 0.45f;      // cooldown entre ataques
+    public boolean keepAttackWhileHasTarget = true;
 
-    // Optional: stagger (si no lo quieres, lo dejas true por defecto y listo)
-    public final boolean staggerAttacks;
-    public final float staggerScale;            // 1.0 => igual que antes
+    // Optional: stagger
+    public boolean staggerAttacks = true;
+    public float staggerScale = 1.0f;            // 1.0 => igual que antes
 
     // (3) Leashes
-    public final double leashSummonToOwner;
-    public final double leashTargetToOwner;
+    public double leashSummonToOwner = 10.0;
+    public double leashTargetToOwner = 8.0;
 
     // (4) Hover
-    public final double hoverAboveOwner;
-    public final double maxAboveOwner;
+    public double hoverAboveOwner = 6.0;
+    public double maxAboveOwner = 10.0;
 
     // (7) Performance
-    public final float ownerMaintenanceCooldownSec;
+    public float ownerMaintenanceCooldownSec = 0.35f;
 
-    public static final SummonTuning DEFAULT = builder().build();
-
-    private SummonTuning(Builder b) {
-        this.followSpeed = b.followSpeed;
-        this.travelToTargetSpeed = b.travelToTargetSpeed;
-        this.hitDistance = b.hitDistance;
-
-        this.hitDamageDelaySec = b.hitDamageDelaySec;
-        this.attackIntervalSec = b.attackIntervalSec;
-        this.keepAttackWhileHasTarget = b.keepAttackWhileHasTarget;
-
-        this.staggerAttacks = b.staggerAttacks;
-        this.staggerScale = b.staggerScale;
-
-        this.leashSummonToOwner = b.leashSummonToOwner;
-        this.leashTargetToOwner = b.leashTargetToOwner;
-
-        this.hoverAboveOwner = b.hoverAboveOwner;
-        this.maxAboveOwner = b.maxAboveOwner;
-
-        this.ownerMaintenanceCooldownSec = b.ownerMaintenanceCooldownSec;
-    }
-
-    public static Builder builder() {
-        return new Builder();
-    }
+    public static final SummonTuning DEFAULT = new SummonTuning();
 
     public static SummonTuning orDefault(@Nullable SummonTuning t) {
-        return (t != null) ? t : DEFAULT;
+        return (t == null) ? DEFAULT : t;
     }
 
-    public static final class Builder {
-        // Defaults
-        private double followSpeed = 16.0;
-        private double travelToTargetSpeed = 10.0;
-        private double hitDistance = 1.2;
+    /** Aplica defensas/clamps igual que tu build(). */
+    private void sanitize() {
+        if (followSpeed < 0.0) followSpeed = 0.0;
+        if (travelToTargetSpeed < 0.0) travelToTargetSpeed = 0.0;
 
-        private float hitDamageDelaySec = 0.14f;
-        private float attackIntervalSec = 0.45f;
-        private boolean keepAttackWhileHasTarget = true;
+        if (hitDistance < 0.01) hitDistance = 0.01;
 
-        private boolean staggerAttacks = true;
-        private float staggerScale = 1.0f;
+        if (hitDamageDelaySec < 0.0f) hitDamageDelaySec = 0.0f;
 
-        private double leashSummonToOwner = 10.0;
-        private double leashTargetToOwner = 8.0;
+        if (attackIntervalSec < 0.01f) attackIntervalSec = 0.01f;
 
-        private double hoverAboveOwner = 6.0;
-        private double maxAboveOwner = 10.0;
+        if (ownerMaintenanceCooldownSec < 0.05f) ownerMaintenanceCooldownSec = 0.05f;
 
-        private float ownerMaintenanceCooldownSec = 0.35f;
-
-        public Builder followSpeed(double v) { this.followSpeed = v; return this; }
-        public Builder travelToTargetSpeed(double v) { this.travelToTargetSpeed = v; return this; }
-        public Builder hitDistance(double v) { this.hitDistance = v; return this; }
-
-        public Builder hitDamageDelaySec(float v) { this.hitDamageDelaySec = v; return this; }
-        public Builder attackIntervalSec(float v) { this.attackIntervalSec = v; return this; }
-        public Builder keepAttackWhileHasTarget(boolean v) { this.keepAttackWhileHasTarget = v; return this; }
-
-        public Builder staggerAttacks(boolean v) { this.staggerAttacks = v; return this; }
-        public Builder staggerScale(float v) { this.staggerScale = v; return this; }
-
-        public Builder leashSummonToOwner(double v) { this.leashSummonToOwner = v; return this; }
-        public Builder leashTargetToOwner(double v) { this.leashTargetToOwner = v; return this; }
-
-        public Builder hoverAboveOwner(double v) { this.hoverAboveOwner = v; return this; }
-        public Builder maxAboveOwner(double v) { this.maxAboveOwner = v; return this; }
-
-        public Builder ownerMaintenanceCooldownSec(float v) { this.ownerMaintenanceCooldownSec = v; return this; }
-
-        public SummonTuning build() {
-            // Pequeñas defensas
-            if (hitDistance < 0.01) hitDistance = 0.01;
-            if (attackIntervalSec < 0.01f) attackIntervalSec = 0.01f;
-            if (ownerMaintenanceCooldownSec < 0.05f) ownerMaintenanceCooldownSec = 0.05f;
-            if (maxAboveOwner < hoverAboveOwner) maxAboveOwner = hoverAboveOwner;
-            if (staggerScale < 0f) staggerScale = 0f;
-            return new SummonTuning(this);
+        if (maxAboveOwner < hoverAboveOwner) {
+            maxAboveOwner = hoverAboveOwner;
         }
+
+        if (staggerScale < 0f) staggerScale = 0f;
     }
+
+    // ---------------------------------------
+    // CODEC (herencia + defaults + sanitize)
+    // ---------------------------------------
+    public static final BuilderCodec<SummonTuning> CODEC =
+            BuilderCodec.builder(SummonTuning.class, SummonTuning::new)
+
+                    // (1) Movement
+                    .appendInherited(new KeyedCodec<>("FollowSpeed", Codec.DOUBLE),
+                            (o, v) -> { if (v != null) o.followSpeed = v; },
+                            (o) -> o.followSpeed,
+                            (o, p) -> o.followSpeed = p.followSpeed
+                    ).add()
+
+                    .appendInherited(new KeyedCodec<>("TravelToTargetSpeed", Codec.DOUBLE),
+                            (o, v) -> { if (v != null) o.travelToTargetSpeed = v; },
+                            (o) -> o.travelToTargetSpeed,
+                            (o, p) -> o.travelToTargetSpeed = p.travelToTargetSpeed
+                    ).add()
+
+                    .appendInherited(new KeyedCodec<>("HitDistance", Codec.DOUBLE),
+                            (o, v) -> { if (v != null) o.hitDistance = v; },
+                            (o) -> o.hitDistance,
+                            (o, p) -> o.hitDistance = p.hitDistance
+                    ).add()
+
+                    // (2) Cadence / timings
+                    .appendInherited(new KeyedCodec<>("HitDamageDelaySec", Codec.FLOAT),
+                            (o, v) -> { if (v != null) o.hitDamageDelaySec = v; },
+                            (o) -> o.hitDamageDelaySec,
+                            (o, p) -> o.hitDamageDelaySec = p.hitDamageDelaySec
+                    ).add()
+
+                    .appendInherited(new KeyedCodec<>("AttackIntervalSec", Codec.FLOAT),
+                            (o, v) -> { if (v != null) o.attackIntervalSec = v; },
+                            (o) -> o.attackIntervalSec,
+                            (o, p) -> o.attackIntervalSec = p.attackIntervalSec
+                    ).add()
+
+                    .appendInherited(new KeyedCodec<>("KeepAttackWhileHasTarget", Codec.BOOLEAN),
+                            (o, v) -> { if (v != null) o.keepAttackWhileHasTarget = v; },
+                            (o) -> o.keepAttackWhileHasTarget,
+                            (o, p) -> o.keepAttackWhileHasTarget = p.keepAttackWhileHasTarget
+                    ).add()
+
+                    .appendInherited(new KeyedCodec<>("StaggerAttacks", Codec.BOOLEAN),
+                            (o, v) -> { if (v != null) o.staggerAttacks = v; },
+                            (o) -> o.staggerAttacks,
+                            (o, p) -> o.staggerAttacks = p.staggerAttacks
+                    ).add()
+
+                    .appendInherited(new KeyedCodec<>("StaggerScale", Codec.FLOAT),
+                            (o, v) -> { if (v != null) o.staggerScale = v; },
+                            (o) -> o.staggerScale,
+                            (o, p) -> o.staggerScale = p.staggerScale
+                    ).add()
+
+                    // (3) Leashes
+                    .appendInherited(new KeyedCodec<>("LeashSummonToOwner", Codec.DOUBLE),
+                            (o, v) -> { if (v != null) o.leashSummonToOwner = v; },
+                            (o) -> o.leashSummonToOwner,
+                            (o, p) -> o.leashSummonToOwner = p.leashSummonToOwner
+                    ).add()
+
+                    .appendInherited(new KeyedCodec<>("LeashTargetToOwner", Codec.DOUBLE),
+                            (o, v) -> { if (v != null) o.leashTargetToOwner = v; },
+                            (o) -> o.leashTargetToOwner,
+                            (o, p) -> o.leashTargetToOwner = p.leashTargetToOwner
+                    ).add()
+
+                    // (4) Hover
+                    .appendInherited(new KeyedCodec<>("HoverAboveOwner", Codec.DOUBLE),
+                            (o, v) -> { if (v != null) o.hoverAboveOwner = v; },
+                            (o) -> o.hoverAboveOwner,
+                            (o, p) -> o.hoverAboveOwner = p.hoverAboveOwner
+                    ).add()
+
+                    .appendInherited(new KeyedCodec<>("MaxAboveOwner", Codec.DOUBLE),
+                            (o, v) -> { if (v != null) o.maxAboveOwner = v; },
+                            (o) -> o.maxAboveOwner,
+                            (o, p) -> o.maxAboveOwner = p.maxAboveOwner
+                    ).add()
+
+                    // (7) Performance
+                    .appendInherited(new KeyedCodec<>("OwnerMaintenanceCooldownSec", Codec.FLOAT),
+                            (o, v) -> { if (v != null) o.ownerMaintenanceCooldownSec = v; },
+                            (o) -> o.ownerMaintenanceCooldownSec,
+                            (o, p) -> o.ownerMaintenanceCooldownSec = p.ownerMaintenanceCooldownSec
+                    ).add()
+
+                    // Defensas post-decode (clamps)
+                    .afterDecode((SummonTuning o, ExtraInfo info) -> o.sanitize())
+
+                    .build();
 }
