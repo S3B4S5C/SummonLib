@@ -25,7 +25,7 @@ import java.util.UUID;
 public class SummonCastInteraction extends Interaction {
 
     private static final HytaleLogger LOGGER = HytaleLogger.forEnclosingClass();
-    private static final boolean DEBUG = true;
+    private static final boolean DEBUG = false;
 
     public enum Mode { ADD, SET, CLEAR }
 

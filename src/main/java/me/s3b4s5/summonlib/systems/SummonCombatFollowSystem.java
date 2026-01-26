@@ -40,7 +40,7 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
     // =========================
     // DEBUG / TESTS (tune these)
     // =========================
-    private static final boolean DEBUG = true;
+    private static final boolean DEBUG = false;
     private static final boolean DEBUG_STACKTRACE = false;
 
     // Set to "BatMinion" to focus; set null to log all summon IDs

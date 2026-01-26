@@ -1,29 +1,53 @@
 {
-  "Type": "Abstract",
+  "Type": "Generic",
   "StartState": "Idle",
-
   "Parameters": {
-    "Appearance": { "Value": "Bat" },
-    "MaxHealth": { "Value": 15 },
-    "NameTranslationKey": { "Value": "server.npcRoles.Bat.name" },
-
-    "FlockArray": { "Value": ["Summoned_Bat_Ally"], "TypeHint": "String" },
-
-    "AttackDistance": { "Value": 5 },
-    "DesiredAttackDistanceRange": { "Value": [1.0, 1.2] },
-
-    "MinHeightOverGround": { "Value": 0 },
-    "MaxHeightOverGround": { "Value": 5 },
-    "WanderRadius": { "Value": 10 }
+    "Appearance": {
+      "Value": "Bat"
+    },
+    "MaxHealth": {
+      "Value": 15
+    },
+    "NameTranslationKey": {
+      "Value": "server.npcRoles.Bat.name"
+    },
+    "FlockArray": {
+      "Value": [
+        "Summoned_Bat_Ally"
+      ],
+      "TypeHint": "String"
+    },
+    "AttackDistance": {
+      "Value": 5
+    },
+    "DesiredAttackDistanceRange": {
+      "Value": [
+        1.0,
+        1.2
+      ]
+    },
+    "MinHeightOverGround": {
+      "Value": 0
+    },
+    "MaxHeightOverGround": {
+      "Value": 5
+    },
+    "WanderRadius": {
+      "Value": 10
+    }
   },
-
-
-  "Appearance": { "Compute": "Appearance" },
-  "MaxHealth": { "Compute": "MaxHealth" },
-  "NameTranslationKey": { "Compute": "NameTranslationKey" },
-
-  "BusyStates": ["Idle"],
-
+  "Appearance": {
+    "Compute": "Appearance"
+  },
+  "MaxHealth": {
+    "Compute": "MaxHealth"
+  },
+  "NameTranslationKey": {
+    "Compute": "NameTranslationKey"
+  },
+  "BusyStates": [
+    "Idle"
+  ],
   "MotionControllerList": [
     {
       "Type": "Fly",
@@ -32,34 +56,54 @@
       "MaxClimbSpeed": 10,
       "MinAirSpeed": 4,
       "Acceleration": 5,
-      "MinHeightOverGround": { "Compute": "MinHeightOverGround" },
-      "MaxHeightOverGround": { "Compute": "MaxHeightOverGround" },
+      "MinHeightOverGround": {
+        "Compute": "MinHeightOverGround"
+      },
+      "MaxHeightOverGround": {
+        "Compute": "MaxHeightOverGround"
+      },
       "MaxRollAngle": 180,
       "MaxTurnSpeed": 360
     }
   ],
-
   "Instructions": [
     {
       "Instructions": [
         {
-          "Sensor": { "Type": "State", "State": "Idle" },
+          "Sensor": {
+            "Type": "State",
+            "State": "Idle"
+          },
           "Instructions": [
             {
-              "Sensor": { "Type": "State", "State": ".Default" },
+              "Sensor": {
+                "Type": "State",
+                "State": ".Default"
+              },
               "Actions": [
-                { "Type": "PlayAnimation", "Slot": "Status" },
-                { "Type": "State", "State": ".Fly" }
+                {
+                  "Type": "PlayAnimation",
+                  "Slot": "Status"
+                },
+                {
+                  "Type": "State",
+                  "State": ".Fly"
+                }
               ]
             },
             {
-              "Sensor": { "Type": "State", "State": ".Fly" },
+              "Sensor": {
+                "Type": "State",
+                "State": ".Fly"
+              },
               "Instructions": [
                 {
-                  "$Comment": "Moverse SOLO cuando hay leash (así Seek tiene destino válido).",
+                  "$Comment": "Moverse SOLO cuando hay leash (as\u00ED Seek tiene destino v\u00E1lido).",
                   "Sensor": {
                     "Type": "Leash",
-                    "Range": { "Compute": "WanderRadius" }
+                    "Range": {
+                      "Compute": "WanderRadius"
+                    }
                   },
                   "BodyMotion": {
                     "Type": "Seek",

@@ -2,16 +2,17 @@
   "Group": "s3b4s5",
   "Name": "SummonLib",
   "Version": "1.0.0",
-  "Description": "TODO Description..",
+  "Description": "Asset-driven summon system for Hytale: define summons in JSON, tune movement/combat behavior, and control them via Interaction assets. ",
   "Authors": [
     {
       "Name": "s3b4s5"
     }
   ],
-  "Website": "",
+  "Website": "https://github.com/S3B4S5C/SummonLib-Docs/wiki",
   "ServerVersion": "*",
   "Dependencies": {},
   "OptionalDependencies": {},
+  "LoadBefore": {},
   "DisabledByDefault": false,
   "Main": "me.s3b4s5.summonlib.SummonLib",
   "IncludesAssetPack": true

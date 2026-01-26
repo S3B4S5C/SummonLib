@@ -5,12 +5,7 @@ import com.hypixel.hytale.component.query.Query;
 import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.math.vector.Transform;
 import com.hypixel.hytale.math.vector.Vector3d;
-import com.hypixel.hytale.server.core.asset.type.model.config.Model;
-import com.hypixel.hytale.server.core.asset.type.model.config.ModelAsset;
 import com.hypixel.hytale.server.core.entity.UUIDComponent;
-import com.hypixel.hytale.server.core.modules.entity.component.BoundingBox;
-import com.hypixel.hytale.server.core.modules.entity.component.ModelComponent;
-import com.hypixel.hytale.server.core.modules.entity.component.PersistentModel;
 import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;
 import com.hypixel.hytale.server.core.modules.entity.tracker.NetworkId;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
@@ -23,7 +18,6 @@ import me.s3b4s5.summonlib.api.SummonDefinition;
 import me.s3b4s5.summonlib.api.SummonRegistry;
 import me.s3b4s5.summonlib.stats.SummonStats;
 import me.s3b4s5.summonlib.tags.SummonTag;
-import me.s3b4s5.summonlib.api.ModelSummonDefinition;
 
 import java.lang.reflect.Method;
 import java.util.*;
@@ -33,7 +27,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class SummonActions {
 
     private static final HytaleLogger LOGGER = HytaleLogger.forEnclosingClass();
-    private static final boolean DEBUG = true;
+    private static final boolean DEBUG = false;
 
     private static final double SPAWN_RING = 0.35;
 
@@ -67,7 +61,7 @@ public final class SummonActions {
             return;
         }
 
-        int capSlots = SummonStats.getMaxSlots(store, ownerRef);
+        int capSlots = SummonStats.getMaxSlots(store, cb, ownerRef);
 
         List<Ref<EntityStore>> all = collectOwnerSummons(store, summonTagType, ownerUuid);
 
@@ -183,7 +177,7 @@ public final class SummonActions {
 
         Holder<EntityStore> built = def.summonSpawnFactory.create(store, ownerUuid, ownerTransform, pos, spawnSeq, variantIndex);
         if (built == null) {
-            LOGGER.atWarning().log("[SummonActions] SpawnFactory returned null for %s", def.id);
+            LOGGER.atWarning().log("[SummonActions] SpawnFactory returned null for %s %s %s %s %s %s %s", def.id, store, ownerUuid, ownerTransform, pos, spawnSeq, variantIndex);
             return;
         }
 

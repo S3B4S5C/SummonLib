@@ -29,7 +29,7 @@ import java.util.UUID;
 public final class SummonClearSummonsInteraction extends Interaction {
 
     private static final HytaleLogger LOGGER = HytaleLogger.forEnclosingClass();
-    private static final boolean DEBUG = true;
+    private static final boolean DEBUG = false;
 
     public static final BuilderCodec<SummonClearSummonsInteraction> CODEC =
             BuilderCodec.builder(SummonClearSummonsInteraction.class, SummonClearSummonsInteraction::new, Interaction.ABSTRACT_CODEC)

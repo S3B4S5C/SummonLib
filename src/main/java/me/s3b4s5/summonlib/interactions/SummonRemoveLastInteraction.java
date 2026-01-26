@@ -30,7 +30,7 @@ import java.util.UUID;
 public final class SummonRemoveLastInteraction extends Interaction {
 
     private static final HytaleLogger LOGGER = HytaleLogger.forEnclosingClass();
-    private static final boolean DEBUG = true;
+    private static final boolean DEBUG = false;
 
     public static final BuilderCodec<SummonRemoveLastInteraction> CODEC =
             BuilderCodec.builder(SummonRemoveLastInteraction.class, SummonRemoveLastInteraction::new, Interaction.ABSTRACT_CODEC)
