@@ -1,4 +1,4 @@
-package me.s3b4s5.summonlib.api;
+package me.s3b4s5.summonlib.internal.impl.definition;
 
 import com.hypixel.hytale.codec.Codec;
 import com.hypixel.hytale.codec.ExtraInfo;

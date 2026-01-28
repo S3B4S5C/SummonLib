@@ -15,9 +15,13 @@ import com.hypixel.hytale.codec.codecs.array.ArrayCodec;
 import com.hypixel.hytale.codec.function.FunctionCodec;
 import com.hypixel.hytale.codec.validation.ValidatorCache;
 import com.hypixel.hytale.codec.validation.Validators;
-import me.s3b4s5.summonlib.api.*;
 import me.s3b4s5.summonlib.api.follow.BackOrbitFollowController;
 import me.s3b4s5.summonlib.api.follow.ModelFollowController;
+import me.s3b4s5.summonlib.internal.impl.definition.ModelSummonDefinition;
+import me.s3b4s5.summonlib.internal.impl.definition.NpcRoleSummonDefinition;
+import me.s3b4s5.summonlib.internal.impl.definition.SummonDefinition;
+import me.s3b4s5.summonlib.internal.impl.definition.SummonTuning;
+import me.s3b4s5.summonlib.internal.impl.spawn.NpcRoleSummonSpawnFactory;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;

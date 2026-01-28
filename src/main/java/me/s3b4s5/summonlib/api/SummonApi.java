@@ -13,6 +13,7 @@ import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import com.hypixel.hytale.server.core.util.TargetUtil;
+import me.s3b4s5.summonlib.internal.impl.definition.SummonDefinition;
 import me.s3b4s5.summonlib.stats.SummonStats;
 import me.s3b4s5.summonlib.tags.SummonTag;
 

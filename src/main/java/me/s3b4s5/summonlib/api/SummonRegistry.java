@@ -1,6 +1,7 @@
 package me.s3b4s5.summonlib.api;
 
 import me.s3b4s5.summonlib.assets.SummonConfig;
+import me.s3b4s5.summonlib.internal.impl.definition.SummonDefinition;
 
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -10,12 +11,11 @@ public final class SummonRegistry {
 
     private SummonRegistry() {}
 
-    /** Opcional: deja register() por si quieres hot-register en dev. */
+
     public static void register(SummonDefinition def) {
         cache.put(def.id, def);
     }
 
-    /** Nuevo: resuelve desde AssetMap y cachea el runtime SummonDefinition. */
     public static SummonDefinition get(String id) {
         SummonDefinition cached = cache.get(id);
         if (cached != null) return cached;

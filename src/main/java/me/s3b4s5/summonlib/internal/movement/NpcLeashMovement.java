@@ -1,4 +1,4 @@
-package me.s3b4s5.summonlib.systems;
+package me.s3b4s5.summonlib.internal.movement;
 
 import com.hypixel.hytale.component.CommandBuffer;
 import com.hypixel.hytale.component.Ref;
@@ -11,9 +11,32 @@ import com.hypixel.hytale.server.npc.entities.NPCEntity;
 public final class NpcLeashMovement implements SummonMovement {
 
     @Override
-    public void moveTowards(float dt, Vector3d cur, Vector3d target, double speed, TransformComponent summonT) {
-        // NOOP: NO tocar Transform en NPCs.
-        // El movimiento real lo hace el Role/MotionController.
+    public void moveTowards(float dt, Vector3d cur, Vector3d target, double speed, TransformComponent t) {
+        // speed = unidades por segundo
+        if (speed <= 0 || dt <= 0) return;
+
+        double dx = target.x - cur.x;
+        double dy = target.y - cur.y;
+        double dz = target.z - cur.z;
+
+        double distSq = dx*dx + dy*dy + dz*dz;
+        if (distSq < 1e-9) return;
+
+        double dist = Math.sqrt(distSq);
+        double maxStep = speed * dt;
+
+        // si estamos cerca, llegamos exacto
+        if (maxStep >= dist) {
+            t.setPosition(target);
+            return;
+        }
+
+        double k = maxStep / dist; // 0..1
+        t.setPosition(new Vector3d(
+                cur.x + dx * k,
+                cur.y + dy * k,
+                cur.z + dz * k
+        ));
     }
 
     @Override

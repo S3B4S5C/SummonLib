@@ -14,7 +14,7 @@ import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 
 import me.s3b4s5.summonlib.SummonLib;
-import me.s3b4s5.summonlib.api.SummonDefinition;
+import me.s3b4s5.summonlib.internal.impl.definition.SummonDefinition;
 import me.s3b4s5.summonlib.api.SummonRegistry;
 import me.s3b4s5.summonlib.stats.SummonStats;
 import me.s3b4s5.summonlib.tags.SummonTag;

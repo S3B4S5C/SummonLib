@@ -1,4 +1,4 @@
-package me.s3b4s5.summonlib.systems;
+package me.s3b4s5.summonlib.internal.movement;
 
 import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;

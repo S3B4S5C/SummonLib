@@ -1,4 +1,4 @@
-package me.s3b4s5.summonlib.systems;
+package me.s3b4s5.summonlib.internal.movement;
 
 import com.hypixel.hytale.component.CommandBuffer;
 import com.hypixel.hytale.component.Ref;
@@ -9,7 +9,6 @@ import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 
 public interface SummonMovement {
     void moveTowards(float dt, Vector3d cur, Vector3d target, double speed, TransformComponent summonT);
-
     void faceOwner(
             TransformComponent summonT,
             Object ownerRotationObj,

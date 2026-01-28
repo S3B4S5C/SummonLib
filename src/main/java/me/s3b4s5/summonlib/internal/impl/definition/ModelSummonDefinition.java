@@ -1,5 +1,6 @@
-package me.s3b4s5.summonlib.api;
+package me.s3b4s5.summonlib.internal.impl.definition;
 
+import me.s3b4s5.summonlib.internal.impl.spawn.ModelSummonSpawnFactory;
 import me.s3b4s5.summonlib.api.follow.ModelFollowController;
 
 import javax.annotation.Nullable;

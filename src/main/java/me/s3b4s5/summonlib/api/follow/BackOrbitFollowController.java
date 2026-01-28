@@ -12,7 +12,6 @@ public final class BackOrbitFollowController implements ModelFollowController, O
     private final double orbitRadius;
     private final double attackHeight;
 
-    // Pitch clamp (radians). Positive pitch usually means looking down.
     private final double minPitchRad;
     private final double maxPitchRad;
 

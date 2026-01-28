@@ -1,0 +1,196 @@
+{
+  "Type": "Abstract",
+  "StartState": "Idle",
+  "Parameters": {
+    "Appearance": {
+      "Value": "Skeleton"
+    },
+    "MaxHealth": {
+      "Value": 15
+    },
+    "NameTranslationKey": {
+      "Value": "server.npcRoles.Summon.name"
+    },
+    "WanderRadius": {
+      "Value": 10
+    },
+    "AttackAnimationId": {
+      "Value": "Attack"
+    }
+  },
+  "Appearance": {
+    "Compute": "Appearance"
+  },
+  "MaxHealth": {
+    "Compute": "MaxHealth"
+  },
+  "NameTranslationKey": {
+    "Compute": "NameTranslationKey"
+  },
+  "BusyStates": [
+    "Idle"
+  ],
+  "MotionControllerList": [
+    {
+      "$Comment": "Walk controller with hover DISABLED so it won't levitate.",
+      "Type": "Walk",
+      "EpsilonSpeed": 1.0E-4,
+      "EpsilonAngle": 2.5,
+      "MaxHeadRotationSpeed": 270.0,
+      "ForceVelocityDamping": 0.65,
+      "RunThreshold": 0.75,
+      "RunThresholdRange": 0.2,
+      "MaxWalkSpeed": 8.0,
+      "MinWalkSpeed": 6.0,
+      "MaxFallSpeed": 9.5,
+      "MaxSinkSpeedFluid": 5.5,
+      "Gravity": 12.0,
+      "Acceleration": 6.5,
+      "MaxRotationSpeed": 540.0,
+      "MaxWalkTurnAngle": 110.0,
+      "BlendRestTurnAngle": 45.0,
+      "BlendRestRelativeSpeed": 0.35,
+      "MaxClimbHeight": 1.8,
+      "JumpHeight": 0.9,
+      "MinJumpHeight": 0.7,
+      "MinJumpDistance": 0.35,
+      "JumpForce": 2.2,
+      "JumpBlending": 0.6,
+      "JumpDescentBlending": 1.3,
+      "JumpDescentSteepness": 1.6,
+      "AscentAnimationType": "Walk",
+      "ClimbSpeedMult": 0.8,
+      "ClimbSpeedPow": 1.15,
+      "ClimbSpeedConst": 4.0,
+      "MinDescentAnimationHeight": 9999.0,
+      "DescendFlatness": 0.55,
+      "DescendSpeedCompensation": 0.8,
+      "DescentAnimationType": "Walk",
+      "DescentSteepness": 1.7,
+      "DescentBlending": 2.2,
+      "MaxDropHeight": 4.5,
+      "FenceBlockSet": "Fence",
+      "JumpRange": [
+        0.2,
+        1.4
+      ],
+      "MinHover": 0.0,
+      "MaxHover": 0.0,
+      "MinHoverClimb": 0.0,
+      "MinHoverDrop": 0.0,
+      "FloatsDown": false,
+      "HoverFreq": 0.0,
+      "MinHitSlowdown": 0.25
+    }
+  ],
+  "Instructions": [
+    {
+      "Instructions": [
+        {
+          "Sensor": {
+            "Type": "State",
+            "State": "Idle"
+          },
+          "Instructions": [
+            {
+              "$Comment": "Boot: start Status animation system, enter Move loop.",
+              "Sensor": {
+                "Type": "State",
+                "State": ".Default"
+              },
+              "Actions": [
+                {
+                  "Type": "PlayAnimation",
+                  "Slot": "Status"
+                },
+                {
+                  "Type": "State",
+                  "State": ".Move"
+                }
+              ]
+            },
+            {
+              "$Comment": "Attack is requested externally by setting State '.Attack'.",
+              "Sensor": {
+                "Type": "State",
+                "State": ".Attack"
+              },
+              "Actions": [
+                {
+                  "Type": "PlayAnimation",
+                  "Slot": "Status"
+                },
+                {
+                  "Type": "State",
+                  "State": ".AttackWait"
+                }
+              ]
+            },
+            {
+              "$Comment": "Stay in AttackWait while 'AttackAnimationId' is the active Status animation. When it stops, go back to Move.",
+              "Sensor": {
+                "Type": "State",
+                "State": ".AttackWait"
+              },
+              "Instructions": [
+                {
+                  "Sensor": {
+                    "Type": "Animation",
+                    "Slot": "Status",
+                    "AnimationId": {
+                      "Compute": "AttackAnimationId"
+                    },
+                    "Once": false
+                  }
+                },
+                {
+                  "Sensor": {
+                    "Type": "State",
+                    "State": ".Default"
+                  },
+                  "Actions": [
+                    {
+                      "Type": "State",
+                      "State": ".Move"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "$Comment": "Move loop: Seek only if Leash exists. Otherwise stand still.",
+              "Sensor": {
+                "Type": "State",
+                "State": ".Move"
+              },
+              "Instructions": [
+                {
+                  "Sensor": {
+                    "Type": "Leash",
+                    "Range": {
+                      "Compute": "WanderRadius"
+                    },
+                    "Once": false
+                  },
+                  "BodyMotion": {
+                    "Type": "Seek",
+                    "SlowDownDistance": 1.5,
+                    "StopDistance": 1.0,
+                    "RelativeSpeed": 0.6
+                  }
+                },
+                {
+                  "$Comment": "Fallback: no leash => do nothing (no BodyMotion).",
+                  "Sensor": {
+                    "Type": "State",
+                    "State": ".Default"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

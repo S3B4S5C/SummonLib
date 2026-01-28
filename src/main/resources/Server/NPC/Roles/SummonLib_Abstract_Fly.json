@@ -1,0 +1,163 @@
+{
+  "$Comment": "SummonLib - FLY Abstract (Idle / Move / Attack). Minimal + stable.",
+  "Type": "Generic",
+  "StartState": "Idle",
+  "Parameters": {
+    "Appearance": {
+      "Value": "Bat"
+    },
+    "MaxHealth": {
+      "Value": 15
+    },
+    "NameTranslationKey": {
+      "Value": "server.npcRoles.Summon.name"
+    },
+    "WanderRadius": {
+      "Value": 10
+    },
+    "MinHeightOverGround": {
+      "Value": 0
+    },
+    "MaxHeightOverGround": {
+      "Value": 5
+    },
+    "AttackAnimationId": {
+      "Value": "Attack"
+    }
+  },
+  "Appearance": {
+    "Compute": "Appearance"
+  },
+  "MaxHealth": {
+    "Compute": "MaxHealth"
+  },
+  "NameTranslationKey": {
+    "Compute": "NameTranslationKey"
+  },
+  "BusyStates": [
+    "Idle"
+  ],
+  "MotionControllerList": [
+    {
+      "Type": "Fly",
+      "MaxHorizontalSpeed": 20,
+      "MaxSinkSpeed": 20,
+      "MaxClimbSpeed": 10,
+      "MinAirSpeed": 4,
+      "Acceleration": 5,
+      "MinHeightOverGround": {
+        "Compute": "MinHeightOverGround"
+      },
+      "MaxHeightOverGround": {
+        "Compute": "MaxHeightOverGround"
+      },
+      "MaxRollAngle": 180,
+      "MaxTurnSpeed": 360
+    }
+  ],
+  "Instructions": [
+    {
+      "Instructions": [
+        {
+          "Sensor": {
+            "Type": "State",
+            "State": "Idle"
+          },
+          "Instructions": [
+            {
+              "Sensor": {
+                "Type": "State",
+                "State": ".Default"
+              },
+              "Actions": [
+                {
+                  "Type": "PlayAnimation",
+                  "Slot": "Status"
+                },
+                {
+                  "Type": "State",
+                  "State": ".Move"
+                }
+              ]
+            },
+            {
+              "Sensor": {
+                "Type": "State",
+                "State": ".Attack"
+              },
+              "Actions": [
+                {
+                  "Type": "PlayAnimation",
+                  "Slot": "Status"
+                },
+                {
+                  "Type": "State",
+                  "State": ".AttackWait"
+                }
+              ]
+            },
+            {
+              "Sensor": {
+                "Type": "State",
+                "State": ".AttackWait"
+              },
+              "Instructions": [
+                {
+                  "Sensor": {
+                    "Type": "Animation",
+                    "Slot": "Status",
+                    "AnimationId": {
+                      "Compute": "AttackAnimationId"
+                    },
+                    "Once": false
+                  }
+                },
+                {
+                  "Sensor": {
+                    "Type": "State",
+                    "State": ".Default"
+                  },
+                  "Actions": [
+                    {
+                      "Type": "State",
+                      "State": ".Move"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "Sensor": {
+                "Type": "State",
+                "State": ".Move"
+              },
+              "Instructions": [
+                {
+                  "Sensor": {
+                    "Type": "Leash",
+                    "Range": {
+                      "Compute": "WanderRadius"
+                    },
+                    "Once": false
+                  },
+                  "BodyMotion": {
+                    "Type": "Seek",
+                    "SlowDownDistance": 1.5,
+                    "StopDistance": 1.0,
+                    "RelativeSpeed": 0.6
+                  }
+                },
+                {
+                  "Sensor": {
+                    "Type": "State",
+                    "State": ".Default"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

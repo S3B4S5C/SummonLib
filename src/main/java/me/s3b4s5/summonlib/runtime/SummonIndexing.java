@@ -9,8 +9,8 @@ import com.hypixel.hytale.server.core.asset.type.model.config.ModelAsset;
 import com.hypixel.hytale.server.core.modules.entity.component.ModelComponent;
 import com.hypixel.hytale.server.core.modules.entity.component.PersistentModel;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
-import me.s3b4s5.summonlib.api.ModelSummonDefinition;
-import me.s3b4s5.summonlib.api.SummonDefinition;
+import me.s3b4s5.summonlib.internal.impl.definition.ModelSummonDefinition;
+import me.s3b4s5.summonlib.internal.impl.definition.SummonDefinition;
 import me.s3b4s5.summonlib.api.SummonRegistry;
 import me.s3b4s5.summonlib.tags.SummonTag;
 

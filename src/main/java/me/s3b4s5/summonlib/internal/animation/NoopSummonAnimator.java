@@ -1,4 +1,4 @@
-package me.s3b4s5.summonlib.systems;
+package me.s3b4s5.summonlib.internal.animation;
 
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;

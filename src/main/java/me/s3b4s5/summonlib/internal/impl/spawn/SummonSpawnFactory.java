@@ -1,4 +1,4 @@
-package me.s3b4s5.summonlib.api;
+package me.s3b4s5.summonlib.internal.impl.spawn;
 
 import com.hypixel.hytale.component.Holder;
 import com.hypixel.hytale.component.Store;

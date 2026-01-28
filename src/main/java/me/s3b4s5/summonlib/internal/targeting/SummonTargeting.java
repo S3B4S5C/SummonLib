@@ -1,4 +1,4 @@
-package me.s3b4s5.summonlib.systems;
+package me.s3b4s5.summonlib.internal.targeting;
 
 import com.hypixel.hytale.component.ComponentAccessor;
 import com.hypixel.hytale.component.Ref;
@@ -39,10 +39,31 @@ public final class SummonTargeting {
 
     public static boolean passesLoS(World world, Vector3d summonPos, Vector3d ownerEye, Vector3d targetPos,
                                     boolean requireOwnerLoS, boolean requireSummonLoS) {
-        if (requireSummonLoS && !hasLineOfSight(world, summonPos, targetPos)) return false;
-        if (requireOwnerLoS && !hasLineOfSight(world, ownerEye, targetPos)) return false;
-        return true;
+
+        if (!requireOwnerLoS && !requireSummonLoS) return true;
+
+        Vector3d a0 = new Vector3d(targetPos.x, targetPos.y + 0.20, targetPos.z);
+        Vector3d a1 = new Vector3d(targetPos.x, targetPos.y + 0.90, targetPos.z);
+        Vector3d a2 = new Vector3d(targetPos.x, targetPos.y + 1.60, targetPos.z);
+
+        boolean ownerOk = !requireOwnerLoS;
+        boolean summonOk = !requireSummonLoS;
+
+        if (!ownerOk) {
+            ownerOk = hasLineOfSight(world, ownerEye, a0)
+                    || hasLineOfSight(world, ownerEye, a1)
+                    || hasLineOfSight(world, ownerEye, a2);
+        }
+
+        if (!summonOk) {
+            summonOk = hasLineOfSight(world, summonPos, a0)
+                    || hasLineOfSight(world, summonPos, a1)
+                    || hasLineOfSight(world, summonPos, a2);
+        }
+
+        return ownerOk && summonOk;
     }
+
 
     public static Ref<EntityStore> findClosestAliveVisibleInSphere(
             Vector3d center,
