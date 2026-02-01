@@ -18,8 +18,8 @@ import me.s3b4s5.summonlib.internal.impl.definition.SummonDefinition;
 import me.s3b4s5.summonlib.api.SummonRegistry;
 import me.s3b4s5.summonlib.stats.SummonStats;
 import me.s3b4s5.summonlib.tags.SummonTag;
+import me.s3b4s5.summonlib.tags.WormTag;
 
-import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -33,9 +33,10 @@ public final class SummonActions {
 
     private static final ConcurrentHashMap<UUID, AtomicLong> SEQ_BY_OWNER = new ConcurrentHashMap<>();
 
-    private SummonActions() {}
+    private SummonActions() {
+    }
 
-    public enum Mode { ADD, SET, CLEAR }
+    public enum Mode {ADD, SET, CLEAR}
 
     public static void cast(
             Store<EntityStore> store,
@@ -66,13 +67,23 @@ public final class SummonActions {
         List<Ref<EntityStore>> all = collectOwnerSummons(store, summonTagType, ownerUuid);
 
         int usedSlots = 0;
-        int currentThisType = 0;
+        int usedSlotsThisType = 0;
+
         for (Ref<EntityStore> r : all) {
             SummonTag t = store.getComponent(r, summonTagType);
             if (t == null) continue;
 
-            usedSlots += Math.max(0, t.slotCost);
-            if (mode != Mode.CLEAR && summonId.equals(t.summonId)) currentThisType++;
+            int sc = Math.max(0, t.slotCost);
+            usedSlots += sc;
+
+            if (mode != Mode.CLEAR && summonId.equals(t.summonId)) {
+                usedSlotsThisType += sc;
+            }
+        }
+
+        int currentThisType = 0;
+        if (mode != Mode.CLEAR && def != null && def.slotCost > 0) {
+            currentThisType = usedSlotsThisType / def.slotCost;
         }
 
         if (DEBUG) {
@@ -93,7 +104,15 @@ public final class SummonActions {
                 int targetCount = Math.max(0, amount);
 
                 if (currentThisType > targetCount) {
-                    removeTypeCount(store, cb, summonTagType, ownerUuid, summonId, currentThisType - targetCount);
+                    if (targetCount == 0 && def.summonSpawnPlanFactory != null) {
+                        // Worm: borrar cadena completa (head/tail incluidos)
+                        clearSummons(store, cb, summonTagType, ownerUuid, ownerRef, all, summonId);
+
+                        List<Ref<EntityStore>> after = collectOwnerSummons(store, summonTagType, ownerUuid);
+                        SummonIndexing.rebuildOwnerIndices(store, cb, summonTagType, ownerUuid, filterForIndexing(store, after));
+                        return;
+                    }
+                    removeTypeCount(store, cb, summonTagType, ownerUuid, summonId, currentThisType - targetCount, def.slotCost);
                 } else if (currentThisType < targetCount) {
                     int toAdd = targetCount - currentThisType;
                     addSummons(store, cb, summonTagType, ownerUuid, ownerRef, def, toAdd, usedSlots, capSlots, currentThisType);
@@ -170,41 +189,38 @@ public final class SummonActions {
         pos.z += Math.sin(a) * SPAWN_RING;
         pos.y += 0.5;
 
+        World world = store.getExternalData().getWorld();
+        if (world == null) return;
+
+        // ✅ Multi-holder plan (Worm)
+        if (def.summonSpawnPlanFactory != null) {
+            List<Holder<EntityStore>> plan = def.summonSpawnPlanFactory.createPlan(
+                    store, ownerUuid, ownerTransform, pos, spawnSeq, variantIndex
+            );
+            if (plan == null || plan.isEmpty()) return;
+
+            final List<Holder<EntityStore>> holders = new ArrayList<>(plan);
+            world.execute(() -> {
+                for (Holder<EntityStore> h : holders) {
+                    if (h != null) store.addEntity(h, AddReason.SPAWN);
+                }
+            });
+            return;
+        }
+
+        // ✅ Normal single spawn
         if (def.summonSpawnFactory == null) {
             LOGGER.atWarning().log("[SummonActions] Missing summonSpawnFactory for %s", def.id);
             return;
         }
 
         Holder<EntityStore> built = def.summonSpawnFactory.create(store, ownerUuid, ownerTransform, pos, spawnSeq, variantIndex);
-        if (built == null) {
-            LOGGER.atWarning().log("[SummonActions] SpawnFactory returned null for %s %s %s %s %s %s %s", def.id, store, ownerUuid, ownerTransform, pos, spawnSeq, variantIndex);
-            return;
-        }
+        if (built == null) return;
 
         built.putComponent(summonTagType, new SummonTag(ownerUuid, def.id, def.slotCost, spawnSeq, variantIndex));
 
-        if (!tryAddEntity(cb, built)) {
-            final Holder<EntityStore> h = built; // must be effectively final
-            World world = store.getExternalData().getWorld();
-            world.execute(() -> store.addEntity(h, AddReason.SPAWN));
-        }
-    }
-
-
-    private static boolean tryAddEntity(CommandBuffer<EntityStore> cb, Holder<EntityStore> holder) {
-        try {
-            Method m = cb.getClass().getMethod("addEntity", Holder.class, AddReason.class);
-            m.invoke(cb, holder, AddReason.SPAWN);
-            return true;
-        } catch (Throwable ignored) {}
-
-        try {
-            Method m = cb.getClass().getMethod("addEntity", Holder.class);
-            m.invoke(cb, holder);
-            return true;
-        } catch (Throwable ignored) {}
-
-        return false;
+        final Holder<EntityStore> h = built;
+        world.execute(() -> store.addEntity(h, AddReason.SPAWN));
     }
 
     private static void clearSummons(
@@ -236,9 +252,10 @@ public final class SummonActions {
             ComponentType<EntityStore, SummonTag> summonTagType,
             UUID ownerUuid,
             String summonId,
-            int removeCount
+            int removeCount,
+            int defSlotCost
     ) {
-        if (removeCount <= 0) return;
+        if (removeCount <= 0 || defSlotCost <= 0) return;
 
         List<Ref<EntityStore>> all = collectOwnerSummons(store, summonTagType, ownerUuid);
 
@@ -250,20 +267,24 @@ public final class SummonActions {
             return Long.compare(sb, sa);
         });
 
-        int removed = 0;
+        int removedSlots = 0;
+        int removedUnits = 0;
+
         for (Ref<EntityStore> r : all) {
-            if (removed >= removeCount) break;
+            if (removedUnits >= removeCount) break;
 
             SummonTag t = store.getComponent(r, summonTagType);
             if (t == null) continue;
             if (!ownerUuid.equals(t.owner)) continue;
             if (!summonId.equals(t.summonId)) continue;
 
-            cb.removeEntity(r, RemoveReason.REMOVE);
-            removed++;
-        }
+            int sc = Math.max(0, t.slotCost);
+            if (sc <= 0) continue;
 
-        if (DEBUG) LOGGER.atInfo().log("[SummonActions] Removed %d of type %s", removed, summonId);
+            cb.removeEntity(r, RemoveReason.REMOVE);
+            removedSlots += sc;
+            removedUnits = removedSlots / defSlotCost;
+        }
     }
 
     private static List<Ref<EntityStore>> collectOwnerSummons(
@@ -294,4 +315,16 @@ public final class SummonActions {
         AtomicLong a = SEQ_BY_OWNER.computeIfAbsent(ownerUuid, k -> new AtomicLong(System.nanoTime()));
         return a.getAndIncrement();
     }
+
+    private static List<Ref<EntityStore>> filterForIndexing(Store<EntityStore> store, List<Ref<EntityStore>> refs) {
+        var wormTagType = SummonLib.wormTagType();
+        ArrayList<Ref<EntityStore>> out = new ArrayList<>(refs.size());
+        for (Ref<EntityStore> r : refs) {
+            WormTag wt = store.getComponent(r, wormTagType);
+            if (wt != null && wt.segmentIndex > 0) continue; // body/tail fuera
+            out.add(r);
+        }
+        return out;
+    }
+
 }

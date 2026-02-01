@@ -1,61 +1,37 @@
 package me.s3b4s5.summonlib.systems;
 
-import com.hypixel.hytale.component.*;
+import com.hypixel.hytale.component.ArchetypeChunk;
+import com.hypixel.hytale.component.CommandBuffer;
+import com.hypixel.hytale.component.ComponentType;
+import com.hypixel.hytale.component.Ref;
+import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.component.query.Query;
 import com.hypixel.hytale.component.system.tick.EntityTickingSystem;
-import com.hypixel.hytale.logger.HytaleLogger;
-import com.hypixel.hytale.math.vector.Transform;
 import com.hypixel.hytale.math.vector.Vector3d;
-import com.hypixel.hytale.math.vector.Vector3f;
 import com.hypixel.hytale.protocol.AnimationSlot;
 import com.hypixel.hytale.server.core.entity.UUIDComponent;
 import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;
 import com.hypixel.hytale.server.core.modules.entity.damage.Damage;
 import com.hypixel.hytale.server.core.modules.entity.tracker.NetworkId;
-import com.hypixel.hytale.server.core.universe.PlayerRef;
-import com.hypixel.hytale.server.core.universe.Universe;
-import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
-import com.hypixel.hytale.server.core.util.TargetUtil;
-import com.hypixel.hytale.server.npc.entities.NPCEntity;
-
-import me.s3b4s5.summonlib.internal.animation.DefaultSummonAnimator;
-import me.s3b4s5.summonlib.internal.animation.SummonAnimator;
-import me.s3b4s5.summonlib.internal.impl.definition.SummonDefinition;
-import me.s3b4s5.summonlib.api.SummonRegistry;
 import me.s3b4s5.summonlib.api.follow.BackOrbitFollowController;
 import me.s3b4s5.summonlib.api.follow.ModelFollowController;
+import me.s3b4s5.summonlib.internal.animation.DefaultSummonAnimator;
 import me.s3b4s5.summonlib.internal.movement.LerpTransformMovement;
-import me.s3b4s5.summonlib.internal.targeting.SummonTargeting;
-import me.s3b4s5.summonlib.runtime.SummonIndexing;
-import me.s3b4s5.summonlib.stats.SummonStats;
+import me.s3b4s5.summonlib.internal.targeting.SummonTargetSelector;
+import me.s3b4s5.summonlib.internal.tick.SummonTickUtil;
+import me.s3b4s5.summonlib.runtime.SummonAggroRuntime;
+import me.s3b4s5.summonlib.systems.shared.SummonCombatFollowShared;
 import me.s3b4s5.summonlib.tags.SummonTag;
-
+import me.s3b4s5.summonlib.tags.WormTag;
 import org.checkerframework.checker.nullness.compatqual.NonNullDecl;
 
 import javax.annotation.Nullable;
-import java.util.*;
+import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
-
-    private static final HytaleLogger LOGGER = HytaleLogger.forEnclosingClass();
-    private static final String LOG_PREFIX = "[SummonCombatFollowSystem]";
-
-    // Debug
-    private static final boolean DEBUG = false;
-    private static final boolean DEBUG_STACKTRACE = false;
-    private static final String DEBUG_ONLY_SUMMON_ID = "BatMinion";
-    private static final float DEBUG_LOG_PERIOD_SEC = 0.50f;
-
-    private static final boolean DEBUG_MOVEMENT = true;
-    private static final boolean DEBUG_TARGETING = true;
-    private static final boolean DEBUG_DAMAGE = true;
-
-    private static final boolean RUN_SELF_TESTS = true;
-
-    // Config
-    private final ComponentType<EntityStore, SummonTag> summonTagType;
 
     private static final String ANIM_IDLE = "Idle";
     private static final String ANIM_MOVE = "Move";
@@ -68,35 +44,36 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
             new BackOrbitFollowController(0.4, 1.4, 120.0, 0.8, 0.9, 0.8 * 0.6);
 
     private static final LerpTransformMovement MOVE_LERP = new LerpTransformMovement();
-    private final SummonAnimator animatorDefault = new DefaultSummonAnimator(SLOT_BASE);
+    private final DefaultSummonAnimator animator = new DefaultSummonAnimator(SLOT_BASE);
 
-    private final SummonTargeting.ComponentTypeWrapper types = new SummonTargeting.ComponentTypeWrapper();
+    private final ComponentType<EntityStore, SummonTag> summonTagType;
+    private final ComponentType<EntityStore, WormTag> wormTagType;
 
-    // Runtime state (per summon)
+    private final SummonTargetSelector targetSelector;
+
+    // Runtime (per summon)
     private final ConcurrentHashMap<UUID, Ref<EntityStore>> lastTargetBySummon = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Float> startDelayBySummon = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, Boolean> attackModeBySummon = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Float> attackCooldownBySummon = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Float> pendingDamageDelayBySummon = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Ref<EntityStore>> pendingDamageTargetBySummon = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<UUID, Boolean> attackModeBySummon = new ConcurrentHashMap<>();
 
-    // Runtime state (per owner)
+    // Runtime (per owner)
     private final ConcurrentHashMap<UUID, Ref<EntityStore>> focusTargetByOwner = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<UUID, Float> ownerMaintenanceCooldown = new ConcurrentHashMap<>();
 
-    // Debug state
-    private final ConcurrentHashMap<UUID, Float> debugCdBySummon = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<UUID, Boolean> introLogged = new ConcurrentHashMap<>();
-    private volatile boolean selfTestsRan = false;
-
-    public SummonCombatFollowSystem(ComponentType<EntityStore, SummonTag> summonTagType) {
+    public SummonCombatFollowSystem(
+            ComponentType<EntityStore, SummonTag> summonTagType,
+            ComponentType<EntityStore, WormTag> wormTagType
+    ) {
         this.summonTagType = summonTagType;
+        this.wormTagType = wormTagType;
+        this.targetSelector = new SummonTargetSelector(summonTagType);
     }
 
     @NonNullDecl
     @Override
     public Query<EntityStore> getQuery() {
-        // NON-NPC is enforced in tick via early return (Query has no guaranteed “exclude component” API).
         return Query.and(
                 summonTagType,
                 TransformComponent.getComponentType(),
@@ -113,76 +90,28 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
             @NonNullDecl Store<EntityStore> store,
             @NonNullDecl CommandBuffer<EntityStore> cb
     ) {
-        if (RUN_SELF_TESTS && !selfTestsRan) {
-            selfTestsRan = true;
-            runSelfTests();
-        }
+        final SummonTickUtil.ModelSummonCtx ctx = SummonTickUtil.getModelSummonCtxOrNull(
+                index, chunk, store, cb,
+                summonTagType, wormTagType
+        );
+        if (ctx == null) return;
 
-        SummonTag tag = chunk.getComponent(index, summonTagType);
-        UUIDComponent uuidComp = chunk.getComponent(index, UUIDComponent.getComponentType());
-        if (tag == null || uuidComp == null) return;
-
-        final String summonId = tag.getSummonId();
-        final UUID summonUuid = uuidComp.getUuid();
-
-        Ref<EntityStore> summonRef = chunk.getReferenceTo(index);
-        TransformComponent summonT = cb.getComponent(summonRef, TransformComponent.getComponentType());
-        if (summonT == null) {
-            dbgOncePerSummon(dt, summonUuid, summonId, "WARN missing TransformComponent on summonRef");
-            return;
-        }
-
-        // ✅ SPLIT: este sistema SOLO procesa NON-NPC
-        if (store.getComponent(summonRef, NPCEntity.getComponentType()) != null) {
-            return;
-        }
-
-        // Owner
-        UUID ownerUuid = tag.getOwnerUuid();
-        PlayerRef owner = Universe.get().getPlayer(ownerUuid);
-        if (owner == null || owner.getWorldUuid() == null) {
-            dbgOncePerSummon(dt, summonUuid, summonId, "Owner missing/offline -> removing summon. owner=" + ownerUuid);
-            cleanupSummonState(summonUuid, ownerUuid);
-            cb.removeEntity(summonRef, RemoveReason.REMOVE);
-            return;
-        }
-
-        Ref<EntityStore> ownerRef = owner.getReference();
-        if (ownerRef == null || !ownerRef.isValid()) {
-            dbgOncePerSummon(dt, summonUuid, summonId, "OwnerRef invalid -> removing summon. owner=" + ownerUuid);
-            cleanupSummonState(summonUuid, ownerUuid);
-            cb.removeEntity(summonRef, RemoveReason.REMOVE);
-            return;
-        }
-
-        Store<EntityStore> ownerStore = ownerRef.getStore();
-        if (ownerStore == null || ownerStore != store) {
-            dbgOncePerSummon(dt, summonUuid, summonId, "Owner store != summon store -> removing summon.");
-            cleanupSummonState(summonUuid, ownerUuid);
-            cb.removeEntity(summonRef, RemoveReason.REMOVE);
-            return;
-        }
-
-        World world = store.getExternalData().getWorld();
-        if (world == null) return;
-
-        SummonDefinition def = SummonRegistry.get(summonId);
-        if (def == null) {
-            dbgOncePerSummon(dt, summonUuid, summonId, "WARN SummonDefinition missing for summonId=" + summonId);
-            return;
-        }
-
+        final var def = ctx.def();
         final var t = def.tuning;
 
-        final double detectRadius = def.detectRadius;
+        final UUID summonUuid = ctx.selfUuid();
+        final UUID ownerUuid = ctx.ownerCtx().ownerUuid();
+
         final float hitDamage = def.damage;
+        final double detectRadius = def.detectRadius;
+
         final boolean requireOwnerLoS = def.requireOwnerLoS;
         final boolean requireSummonLoS = def.requireSummonLoS;
 
         final double followSpeed = t.followSpeed;
         final double travelToTargetSpeed = t.travelToTargetSpeed;
-        final double hitDistance = t.hitDistance;
 
+        final double hitDistance = t.hitDistance;
         final float hitDelay = t.hitDamageDelaySec;
         final float attackInterval = t.attackIntervalSec;
         final boolean keepAttack = t.keepAttackWhileHasTarget;
@@ -190,503 +119,311 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
         final double leashSummonToOwner = t.leashSummonToOwner;
         final double leashTargetToOwner = t.leashTargetToOwner;
 
-        final float ownerMaintenanceCooldownParam = t.ownerMaintenanceCooldownSec;
         final ModelFollowController controller = (def.followController != null) ? def.followController : DEFAULT_CONTROLLER;
 
-        // Owner transform/look
-        Transform ownerTr = owner.getTransform();
-        Vector3d ownerPos = ownerTr.getPosition();
-
-        Transform ownerLook = TargetUtil.getLook(ownerRef, ownerStore);
-        Vector3d ownerEye = ownerLook.getPosition();
-        Vector3f ownerRot = ownerLook.getRotation();
-        double yawRad = ownerRot.getYaw();
-
-        if (shouldLog(dt, summonUuid, summonId) && !Boolean.TRUE.equals(introLogged.get(summonUuid))) {
-            introLogged.put(summonUuid, true);
-            dbg(summonUuid, summonId,
-                    "INTRO (NON-NPC) owner=" + ownerUuid
-                            + " detectRadius=" + detectRadius
-                            + " dmg=" + hitDamage
-                            + " requireOwnerLoS=" + requireOwnerLoS
-                            + " requireSummonLoS=" + requireSummonLoS
-                            + " leashSummonToOwner=" + leashSummonToOwner
-                            + " leashTargetToOwner=" + leashTargetToOwner);
-        }
-
-        // Owner maintenance
-        if (tryRunOwnerMaintenance(dt, ownerUuid, ownerMaintenanceCooldownParam)) {
-            enforceSlotsAndRebuild(store, cb, ownerRef, ownerUuid);
-        }
-
-        // Home
-        Vector3d homeRaw = controller.computeHome(
+        // Home position
+        final Vector3d ownerPos = ctx.ownerCtx().ownerPos();
+        final Vector3d homeRaw = controller.computeHome(
                 ownerPos,
-                yawRad,
-                Math.max(0, tag.groupIndex),
-                Math.max(1, tag.groupTotal)
+                ctx.ownerCtx().yawRad(),
+                Math.max(0, ctx.tag().groupIndex),
+                Math.max(1, ctx.tag().groupTotal)
         );
-        Vector3d home = SummonCombatFollowShared.applyOwnerHoverYOffset(ownerPos, homeRaw, t.hoverAboveOwner, t.maxAboveOwner);
-        Vector3d cur = summonT.getPosition();
+        final Vector3d home = SummonCombatFollowShared.applyOwnerHoverYOffset(
+                ownerPos, homeRaw, t.hoverAboveOwner, t.maxAboveOwner
+        );
 
-        // Validate focus
-        Ref<EntityStore> focus = focusTargetByOwner.get(ownerUuid);
-        if (focus != null && (!focus.isValid() || !SummonTargeting.isAlive(focus, store))) {
-            focusTargetByOwner.remove(ownerUuid);
-            focus = null;
-        }
+        // 1) Priority: aggro focus
+        final Ref<EntityStore> focus = SummonAggroRuntime.pullAggroFocus(
+                store, ownerUuid, summonTagType, focusTargetByOwner
+        );
 
-        // Target select/update
+        // 2) Otherwise select by radius
         Ref<EntityStore> targetRef = null;
-        if (detectRadius > 0.0) {
-            targetRef = getOrUpdateSummonTarget(
-                    summonUuid, ownerUuid, ownerRef,
-                    store, world, cur, ownerEye, detectRadius, focus,
-                    requireOwnerLoS, requireSummonLoS
-            );
-            if (targetRef != null) focusTargetByOwner.putIfAbsent(ownerUuid, targetRef);
-        } else {
-            dropSummonTarget(summonUuid);
-        }
+        final Vector3d curPos = ctx.selfT().getPosition();
 
-        if (shouldLog(dt, summonUuid, summonId) && DEBUG_MOVEMENT) {
-            double hogCur = SummonTargeting.heightOverGround(world, cur, 128);
-            double hogHome = SummonTargeting.heightOverGround(world, home, 128);
-            dbg(summonUuid, summonId,
-                    String.format(Locale.ROOT,
-                            "POS cur=(%.2f %.2f %.2f) HoG=%.2f | home=(%.2f %.2f %.2f) HoG=%.2f | owner=(%.2f %.2f %.2f)",
-                            cur.x, cur.y, cur.z, hogCur,
-                            home.x, home.y, home.z, hogHome,
-                            ownerPos.x, ownerPos.y, ownerPos.z
-                    )
+        if (focus != null && focus.isValid()) {
+            targetRef = focus;
+        } else if (detectRadius > 0.0) {
+            targetRef = targetSelector.select(
+                    ctx.ownerCtx(),
+                    store,
+                    curPos,
+                    detectRadius,
+                    lastTargetBySummon.get(summonUuid),
+                    null,
+                    requireOwnerLoS,
+                    requireSummonLoS
             );
         }
 
-        // Leash checks (only when we have a target)
-        if (targetRef != null && targetRef.isValid()) {
-            if (SummonCombatFollowShared.distSq(cur, ownerPos) > leashSummonToOwner * leashSummonToOwner) {
-                if (DEBUG_TARGETING && shouldLog(dt, summonUuid, summonId)) {
-                    dbg(summonUuid, summonId, "LEASH break (summon too far). Drop target -> go home.");
-                }
-                focusTargetByOwner.remove(ownerUuid);
-                dropSummonTarget(summonUuid);
-
-                animatorDefault.setBaseAnim(summonUuid, summonRef, ANIM_MOVE, true, store, true);
-                MOVE_LERP.faceOwner(summonT, ownerRot, yawRad, controller);
-                MOVE_LERP.moveTowards(dt, cur, home, followSpeed, summonT);
-                return;
-            }
-
-            TransformComponent tt = store.getComponent(targetRef, TransformComponent.getComponentType());
-            if (tt != null) {
-                Vector3d tp = tt.getPosition();
-                if (SummonCombatFollowShared.distSq(tp, ownerPos) > leashTargetToOwner * leashTargetToOwner) {
-                    if (DEBUG_TARGETING && shouldLog(dt, summonUuid, summonId)) {
-                        dbg(summonUuid, summonId, "LEASH break (target too far). Drop target -> go home.");
-                    }
-                    focusTargetByOwner.remove(ownerUuid);
-                    dropSummonTarget(summonUuid);
-
-                    animatorDefault.setBaseAnim(summonUuid, summonRef, ANIM_MOVE, true, store, true);
-                    MOVE_LERP.faceOwner(summonT, ownerRot, yawRad, controller);
-                    MOVE_LERP.moveTowards(dt, cur, home, followSpeed, summonT);
-                    return;
-                }
-            }
-        }
-
-        // Target changed?
-        Ref<EntityStore> lastT = lastTargetBySummon.get(summonUuid);
-        boolean changed = (lastT == null && targetRef != null)
-                || (lastT != null && (targetRef == null || !lastT.equals(targetRef)));
-
+        // Target change housekeeping
+        final Ref<EntityStore> prev = lastTargetBySummon.get(summonUuid);
+        final boolean changed = !Objects.equals(prev, targetRef);
         if (changed) {
-            if (DEBUG_TARGETING && shouldLog(dt, summonUuid, summonId)) {
-                dbg(summonUuid, summonId, "TARGET changed.");
-            }
-
-            if (targetRef == null) lastTargetBySummon.remove(summonUuid);
-            else lastTargetBySummon.put(summonUuid, targetRef);
-
-            pendingDamageTargetBySummon.remove(summonUuid);
-            pendingDamageDelayBySummon.put(summonUuid, 0f);
-            attackCooldownBySummon.put(summonUuid, 0f);
-
-            if (targetRef != null) {
-                int gi = Math.max(0, tag.globalIndex);
-                int gt = Math.max(1, tag.globalTotal);
-                float stagger = SummonCombatFollowShared.computeStartStagger(gi, gt, attackInterval);
-                startDelayBySummon.put(summonUuid, stagger);
-
-                boolean startNow = (stagger <= 0f);
-                attackModeBySummon.put(summonUuid, startNow);
-
-                if (startNow && keepAttack) {
-                    animatorDefault.setBaseAnim(summonUuid, summonRef, ANIM_ATTACK, true, store, true);
-                }
-            } else {
-                startDelayBySummon.put(summonUuid, 0f);
-                attackModeBySummon.put(summonUuid, false);
-            }
+            onTargetChanged(
+                    summonUuid,
+                    ctx.selfRef(),
+                    store,
+                    targetRef,
+                    ctx.tag(),
+                    attackInterval
+            );
         }
 
-        // Start delay → attackMode
-        float startDelay = startDelayBySummon.getOrDefault(summonUuid, 0f);
-        if (targetRef != null) {
-            boolean attackMode = Boolean.TRUE.equals(attackModeBySummon.get(summonUuid));
+        final boolean hasTarget = (targetRef != null && targetRef.isValid());
 
-            if (startDelay > 0f) {
-                float prev = startDelay;
-                startDelay = Math.max(0f, startDelay - dt);
-                startDelayBySummon.put(summonUuid, startDelay);
-
-                if (prev > 0f && startDelay <= 0f) {
-                    attackModeBySummon.put(summonUuid, true);
-                    if (keepAttack) animatorDefault.setBaseAnim(summonUuid, summonRef, ANIM_ATTACK, true, store, true);
-                }
-            } else {
-                if (!attackMode) {
-                    attackModeBySummon.put(summonUuid, true);
-                    if (keepAttack) animatorDefault.setBaseAnim(summonUuid, summonRef, ANIM_ATTACK, true, store, true);
-                }
-                startDelayBySummon.put(summonUuid, 0f);
-            }
-        } else {
-            startDelayBySummon.put(summonUuid, 0f);
-        }
-
-        // Cooldowns
-        float atkCd = attackCooldownBySummon.getOrDefault(summonUuid, 0f);
-        atkCd = Math.max(0f, atkCd - dt);
-        attackCooldownBySummon.put(summonUuid, atkCd);
-
-        float pd = pendingDamageDelayBySummon.getOrDefault(summonUuid, 0f);
-        if (pd > 0f) {
-            pd = Math.max(0f, pd - dt);
-            pendingDamageDelayBySummon.put(summonUuid, pd);
-            if (pd <= 0f) {
-                applyPendingDamageNow(
-                        summonUuid, ownerRef, store, cb,
-                        world, summonT.getPosition(), ownerEye,
-                        requireOwnerLoS, requireSummonLoS,
-                        hitDamage
-                );
-            }
-        }
+        // Tick cooldowns + apply pending damage
+        tickCooldownsAndDamage(
+                dt,
+                summonUuid,
+                ctx,
+                store,
+                cb,
+                hitDamage,
+                requireOwnerLoS,
+                requireSummonLoS
+        );
 
         // ======================
         // TARGET MODE
         // ======================
-        if (targetRef != null && targetRef.isValid()) {
-            TransformComponent targetT = store.getComponent(targetRef, TransformComponent.getComponentType());
-
-            if (!SummonTargeting.isAlive(targetRef, store)) {
-                focusTargetByOwner.remove(ownerUuid);
-                dropSummonTarget(summonUuid);
+        if (hasTarget) {
+            // Validate target still alive
+            if (!targetSelector.isAlive(targetRef, store)) {
+                clearTargetForOwner(ownerUuid);
+                clearSummonCombatState(summonUuid);
                 return;
             }
 
+            final TransformComponent targetT = store.getComponent(targetRef, TransformComponent.getComponentType());
             if (targetT == null) {
-                dropSummonTarget(summonUuid);
-                animatorDefault.setBaseAnim(summonUuid, summonRef, ANIM_MOVE, true, store, false);
-                MOVE_LERP.faceOwner(summonT, ownerRot, yawRad, controller);
-                MOVE_LERP.moveTowards(dt, cur, home, followSpeed, summonT);
+                clearTargetForOwner(ownerUuid);
+                clearSummonCombatState(summonUuid);
+                goHome(dt, store, summonUuid, ctx.selfRef(), ctx.selfT(), ctx.ownerCtx(), controller, home, followSpeed);
                 return;
             }
 
-            Vector3d tp = targetT.getPosition();
+            final Vector3d tp = targetT.getPosition();
 
-            if (!SummonTargeting.passesLoS(world, summonT.getPosition(), ownerEye, tp, requireOwnerLoS, requireSummonLoS)) {
-                focusTargetByOwner.remove(ownerUuid);
-                dropSummonTarget(summonUuid);
-                animatorDefault.setBaseAnim(summonUuid, summonRef, ANIM_MOVE, true, store, true);
-                MOVE_LERP.faceOwner(summonT, ownerRot, yawRad, controller);
-                MOVE_LERP.moveTowards(dt, cur, home, followSpeed, summonT);
-                return;
+            // Leashes
+            if (leashSummonToOwner > 0.0) {
+                final double d2 = SummonCombatFollowShared.distSq(ctx.selfT().getPosition(), ownerPos);
+                if (d2 > leashSummonToOwner * leashSummonToOwner) {
+                    clearTargetForOwner(ownerUuid);
+                    clearSummonCombatState(summonUuid);
+                    goHome(dt, store, summonUuid, ctx.selfRef(), ctx.selfT(), ctx.ownerCtx(), controller, home, followSpeed);
+                    return;
+                }
             }
 
-            Vector3d anchor = controller.computeAttackAnchor(
+            if (leashTargetToOwner > 0.0) {
+                final double d2 = SummonCombatFollowShared.distSq(tp, ownerPos);
+                if (d2 > leashTargetToOwner * leashTargetToOwner) {
+                    clearTargetForOwner(ownerUuid);
+                    clearSummonCombatState(summonUuid);
+                    goHome(dt, store, summonUuid, ctx.selfRef(), ctx.selfT(), ctx.ownerCtx(), controller, home, followSpeed);
+                    return;
+                }
+            }
+
+            // LoS (owner/summon)
+            if (!targetSelector.passesLoS(
+                    ctx.ownerCtx().world(),
+                    ctx.selfT().getPosition(),
+                    ctx.ownerCtx().ownerEye(),
                     tp,
-                    Math.max(0, tag.globalIndex),
-                    Math.max(1, tag.globalTotal)
+                    requireOwnerLoS,
+                    requireSummonLoS
+            )) {
+                clearTargetForOwner(ownerUuid);
+                clearSummonCombatState(summonUuid);
+                goHome(dt, store, summonUuid, ctx.selfRef(), ctx.selfT(), ctx.ownerCtx(), controller, home, followSpeed);
+                return;
+            }
+
+            // Start delay -> attackMode
+            final boolean attackMode = updateAttackMode(dt, summonUuid);
+
+            // Move to attack anchor
+            final Vector3d anchor = controller.computeAttackAnchor(
+                    tp,
+                    Math.max(0, ctx.tag().globalIndex),
+                    Math.max(1, ctx.tag().globalTotal)
             );
 
-            boolean attackMode = Boolean.TRUE.equals(attackModeBySummon.get(summonUuid));
-
-            // Move to anchor
-            Vector3d before = summonT.getPosition();
-            MOVE_LERP.moveTowards(dt, before, anchor, travelToTargetSpeed, summonT);
+            MOVE_LERP.moveTowards(dt, ctx.selfT().getPosition(), anchor, travelToTargetSpeed, ctx.selfT());
 
             // Base anim
-            if (keepAttack && attackMode) animatorDefault.setBaseAnim(summonUuid, summonRef, ANIM_ATTACK, true, store, false);
-            else animatorDefault.setBaseAnim(summonUuid, summonRef, ANIM_MOVE, true, store, false);
+            final String base = (keepAttack && attackMode) ? ANIM_ATTACK : ANIM_MOVE;
+            animator.setBaseAnim(summonUuid, ctx.selfRef(), base, true, store, false);
 
-            // Schedule damage when close enough to anchor
+            // Schedule damage when close enough
             if (attackMode
                     && pendingDamageTargetBySummon.get(summonUuid) == null
                     && pendingDamageDelayBySummon.getOrDefault(summonUuid, 0f) <= 0f
                     && attackCooldownBySummon.getOrDefault(summonUuid, 0f) <= 0f) {
 
-                double d2 = SummonCombatFollowShared.distSq(anchor, summonT.getPosition());
-                if (d2 <= (hitDistance * hitDistance)) {
+                final double d2 = SummonCombatFollowShared.distSq(anchor, ctx.selfT().getPosition());
+                if (d2 <= hitDistance * hitDistance) {
                     if (store.getComponent(targetRef, NetworkId.getComponentType()) != null) {
                         pendingDamageTargetBySummon.put(summonUuid, targetRef);
                         pendingDamageDelayBySummon.put(summonUuid, hitDelay);
                         attackCooldownBySummon.put(summonUuid, attackInterval);
 
-                        if (DEBUG_DAMAGE && shouldLog(dt, summonUuid, summonId)) {
-                            dbg(summonUuid, summonId,
-                                    String.format(Locale.ROOT,
-                                            "DAMAGE scheduled in %.2fs (atkCd=%.2fs) dist=%.2f",
-                                            hitDelay, attackInterval, Math.sqrt(d2)));
-                        }
-
-                        animatorDefault.setBaseAnim(summonUuid, summonRef, ANIM_ATTACK, true, store, true);
+                        // Kick attack anim (short-lived) even if keepAttack is false
+                        animator.setBaseAnim(summonUuid, ctx.selfRef(), ANIM_ATTACK, true, store, true);
                     } else {
+                        // Target not networked (or not damageable yet) -> small backoff
                         attackCooldownBySummon.put(summonUuid, 0.10f);
                     }
                 }
             }
 
             // Face target
-            MOVE_LERP.faceTarget(summonT, summonT.getPosition(), tp);
+            MOVE_LERP.faceTarget(ctx.selfT(), ctx.selfT().getPosition(), tp);
             return;
         }
 
         // ======================
         // NO TARGET: go home
         // ======================
-        dropSummonTarget(summonUuid);
+        goHome(dt, store, summonUuid, ctx.selfRef(), ctx.selfT(), ctx.ownerCtx(), controller, home, followSpeed);
+    }
 
-        boolean returning = SummonCombatFollowShared.distSq(home, cur) > 0.02;
-        animatorDefault.setBaseAnim(summonUuid, summonRef, returning ? ANIM_MOVE : ANIM_IDLE, true, store, false);
-        MOVE_LERP.faceOwner(summonT, ownerRot, yawRad, controller);
+    private void goHome(
+            float dt,
+            Store<EntityStore> store,
+            UUID summonUuid,
+            Ref<EntityStore> summonRef,
+            TransformComponent summonT,
+            SummonTickUtil.OwnerCtx ownerCtx,
+            ModelFollowController controller,
+            Vector3d home,
+            double followSpeed
+    ) {
+        final Vector3d cur = summonT.getPosition();
+        final boolean returning = SummonCombatFollowShared.distSq(home, cur) > 0.02;
+
+        animator.setBaseAnim(summonUuid, summonRef, returning ? ANIM_MOVE : ANIM_IDLE, true, store, false);
+
+        MOVE_LERP.faceOwner(summonT, ownerCtx.ownerRot(), ownerCtx.yawRad(), controller);
         MOVE_LERP.moveTowards(dt, cur, home, followSpeed, summonT);
     }
 
-    // =======================
-    // Owner maintenance
-    // =======================
-    private void enforceSlotsAndRebuild(Store<EntityStore> store, CommandBuffer<EntityStore> cb, Ref<EntityStore> ownerRef, UUID ownerUuid) {
-        int capSlots = SummonStats.getMaxSlots(store, ownerRef);
-        ArrayList<Ref<EntityStore>> refs = new ArrayList<>();
-
-        Query<EntityStore> q = Query.and(
-                summonTagType,
-                UUIDComponent.getComponentType(),
-                NetworkId.getComponentType(),
-                TransformComponent.getComponentType()
-        );
-
-        int usedSlots = 0;
-
-        store.forEachChunk(q, (chunk, ccb) -> {
-            for (int i = 0; i < chunk.size(); i++) {
-                SummonTag t = chunk.getComponent(i, summonTagType);
-                if (t == null || !ownerUuid.equals(t.owner)) continue;
-                refs.add(chunk.getReferenceTo(i));
-            }
-        });
-
-        for (Ref<EntityStore> r : refs) {
-            SummonTag t = store.getComponent(r, summonTagType);
-            if (t != null) usedSlots += Math.max(0, t.slotCost);
-        }
-
-        refs.sort((a, b) -> {
-            SummonTag ta = store.getComponent(a, summonTagType);
-            SummonTag tb = store.getComponent(b, summonTagType);
-            long sa = ta != null ? ta.spawnSeq : Long.MIN_VALUE;
-            long sb = tb != null ? tb.spawnSeq : Long.MIN_VALUE;
-            return Long.compare(sb, sa);
-        });
-
-        while (usedSlots > capSlots && !refs.isEmpty()) {
-            Ref<EntityStore> r = refs.remove(0);
-            SummonTag t = store.getComponent(r, summonTagType);
-            if (t != null) usedSlots -= Math.max(0, t.slotCost);
-            cb.removeEntity(r, RemoveReason.REMOVE);
-        }
-
-        SummonIndexing.rebuildOwnerIndices(store, cb, summonTagType, ownerUuid, refs);
-
-        Ref<EntityStore> focus = focusTargetByOwner.get(ownerUuid);
-        if (focus != null && (!focus.isValid() || !SummonTargeting.isAlive(focus, store))) {
-            focusTargetByOwner.remove(ownerUuid);
-        }
-    }
-
-    private boolean tryRunOwnerMaintenance(float dt, UUID ownerUuid, float ownerMaintenanceCooldownParam) {
-        float cd = ownerMaintenanceCooldown.getOrDefault(ownerUuid, 0f);
-        cd = Math.max(0f, cd - dt);
-        if (cd > 0f) {
-            ownerMaintenanceCooldown.put(ownerUuid, cd);
-            return false;
-        }
-        ownerMaintenanceCooldown.put(ownerUuid, ownerMaintenanceCooldownParam);
-        return true;
-    }
-
-    // =======================
-    // Targeting
-    // =======================
-    private Ref<EntityStore> getOrUpdateSummonTarget(
+    private void onTargetChanged(
             UUID summonUuid,
-            UUID ownerUuid,
-            Ref<EntityStore> ownerRef,
+            Ref<EntityStore> summonRef,
             Store<EntityStore> store,
-            World world,
-            Vector3d summonPos,
-            Vector3d ownerEye,
-            double radius,
-            @Nullable Ref<EntityStore> preferred,
+            @Nullable Ref<EntityStore> targetRef,
+            SummonTag tag,
+            float attackInterval
+    ) {
+        if (targetRef != null) {
+            lastTargetBySummon.put(summonUuid, targetRef);
+
+            final int gi = Math.max(0, tag.globalIndex);
+            final int gt = Math.max(1, tag.globalTotal);
+            final float stagger = SummonCombatFollowShared.computeStartStagger(gi, gt, attackInterval);
+
+            startDelayBySummon.put(summonUuid, Math.max(0f, stagger));
+            attackModeBySummon.put(summonUuid, stagger <= 0f);
+        } else {
+            lastTargetBySummon.remove(summonUuid);
+            startDelayBySummon.put(summonUuid, 0f);
+            attackModeBySummon.put(summonUuid, false);
+        }
+
+        // Reset hit scheduling/cooldowns whenever target changes
+        pendingDamageTargetBySummon.remove(summonUuid);
+        pendingDamageDelayBySummon.put(summonUuid, 0f);
+        attackCooldownBySummon.put(summonUuid, 0f);
+
+        // If you want an immediate “attack pose” when target acquired, you can optionally:
+        // animator.setBaseAnim(summonUuid, summonRef, ANIM_ATTACK, true, store, true);
+    }
+
+    private boolean updateAttackMode(float dt, UUID summonUuid) {
+        float delay = startDelayBySummon.getOrDefault(summonUuid, 0f);
+        if (delay > 0f) {
+            delay = Math.max(0f, delay - dt);
+            startDelayBySummon.put(summonUuid, delay);
+            if (delay <= 0f) attackModeBySummon.put(summonUuid, true);
+        } else {
+            startDelayBySummon.put(summonUuid, 0f);
+            attackModeBySummon.put(summonUuid, true);
+        }
+        return Boolean.TRUE.equals(attackModeBySummon.get(summonUuid));
+    }
+
+    private void tickCooldownsAndDamage(
+            float dt,
+            UUID summonUuid,
+            SummonTickUtil.ModelSummonCtx ctx,
+            Store<EntityStore> store,
+            CommandBuffer<EntityStore> cb,
+            float hitDamage,
             boolean requireOwnerLoS,
             boolean requireSummonLoS
     ) {
-        Ref<EntityStore> current = lastTargetBySummon.get(summonUuid);
-        if (current != null && current.isValid() && SummonTargeting.isAlive(current, store)) {
-            TransformComponent t = store.getComponent(current, TransformComponent.getComponentType());
-            if (t != null) {
-                Vector3d tp = t.getPosition();
-                if (SummonCombatFollowShared.isWithin(summonPos, tp, radius)
-                        && SummonTargeting.passesLoS(world, summonPos, ownerEye, tp, requireOwnerLoS, requireSummonLoS)) {
-                    return current;
-                }
-            }
+        // Attack cooldown
+        float atkCd = attackCooldownBySummon.getOrDefault(summonUuid, 0f);
+        if (atkCd > 0f) {
+            atkCd = Math.max(0f, atkCd - dt);
+            attackCooldownBySummon.put(summonUuid, atkCd);
         }
 
-        if (preferred != null && preferred.isValid() && SummonTargeting.isAlive(preferred, store)) {
-            if (SummonTargeting.isAllowedTargetHostileOnly(store, ownerRef, preferred, types)
-                    && !preferred.equals(ownerRef)
-                    && store.getComponent(preferred, NetworkId.getComponentType()) != null) {
+        // Pending damage countdown
+        float pd = pendingDamageDelayBySummon.getOrDefault(summonUuid, 0f);
+        if (pd <= 0f) return;
 
-                TransformComponent pt = store.getComponent(preferred, TransformComponent.getComponentType());
-                if (pt != null) {
-                    Vector3d pp = pt.getPosition();
-                    if (SummonCombatFollowShared.isWithin(summonPos, pp, radius)
-                            && SummonTargeting.passesLoS(world, summonPos, ownerEye, pp, requireOwnerLoS, requireSummonLoS)) {
-                        return preferred;
-                    }
-                }
-            }
-        }
+        pd = Math.max(0f, pd - dt);
+        pendingDamageDelayBySummon.put(summonUuid, pd);
 
-        return SummonTargeting.findClosestAliveVisibleInSphere(
-                summonPos, ownerEye, radius,
-                store, world, ownerRef,
-                types, requireOwnerLoS, requireSummonLoS,
-                summonTagType
-        );
-    }
+        if (pd > 0f) return;
 
-    // =======================
-    // Damage
-    // =======================
-    private void applyPendingDamageNow(
-            UUID summonUuid,
-            Ref<EntityStore> ownerRef,
-            Store<EntityStore> store,
-            CommandBuffer<EntityStore> cb,
-            World world,
-            Vector3d summonPosNow,
-            Vector3d ownerEye,
-            boolean requireOwnerLoS,
-            boolean requireSummonLoS,
-            float hitDamage
-    ) {
-        Ref<EntityStore> targetRef = pendingDamageTargetBySummon.remove(summonUuid);
+        final Ref<EntityStore> targetRef = pendingDamageTargetBySummon.remove(summonUuid);
         pendingDamageDelayBySummon.put(summonUuid, 0f);
 
         if (hitDamage <= 0f) return;
         if (targetRef == null || !targetRef.isValid()) return;
-        if (!SummonTargeting.isAlive(targetRef, store)) return;
+        if (!targetSelector.isAlive(targetRef, store)) return;
         if (store.getComponent(targetRef, NetworkId.getComponentType()) == null) return;
 
-        TransformComponent targetT = store.getComponent(targetRef, TransformComponent.getComponentType());
+        final TransformComponent targetT = store.getComponent(targetRef, TransformComponent.getComponentType());
         if (targetT == null) return;
 
-        Vector3d tp = targetT.getPosition();
-        if (!SummonTargeting.passesLoS(world, summonPosNow, ownerEye, tp, requireOwnerLoS, requireSummonLoS)) {
+        final Vector3d tp = targetT.getPosition();
+        final Vector3d summonPosNow = ctx.selfT().getPosition();
+
+        if (!targetSelector.passesLoS(
+                ctx.ownerCtx().world(),
+                summonPosNow,
+                ctx.ownerCtx().ownerEye(),
+                tp,
+                requireOwnerLoS,
+                requireSummonLoS
+        )) {
+            // Small backoff to avoid spamming schedule/apply when LoS fails
             attackCooldownBySummon.put(summonUuid, 0.15f);
             return;
         }
 
-        if (DEBUG_DAMAGE && shouldLog(0f, summonUuid, null)) {
-            dbg(summonUuid, null, "DAMAGE apply now. amount=" + hitDamage);
-        }
-
-        Damage damage = new Damage(new Damage.EntitySource(ownerRef), 1, hitDamage);
+        final Damage damage = new Damage(new Damage.EntitySource(ctx.ownerCtx().ownerRef()), 1, hitDamage);
         cb.invoke(targetRef, damage);
     }
 
-    private void dropSummonTarget(UUID summonUuid) {
-        attackModeBySummon.put(summonUuid, false);
+    private void clearSummonCombatState(UUID summonUuid) {
+        lastTargetBySummon.remove(summonUuid);
         startDelayBySummon.put(summonUuid, 0f);
+        attackModeBySummon.put(summonUuid, false);
+
         attackCooldownBySummon.put(summonUuid, 0f);
         pendingDamageTargetBySummon.remove(summonUuid);
         pendingDamageDelayBySummon.put(summonUuid, 0f);
-        lastTargetBySummon.remove(summonUuid);
     }
 
-    private void cleanupSummonState(UUID summonUuid, UUID ownerUuid) {
-        lastTargetBySummon.remove(summonUuid);
-        startDelayBySummon.remove(summonUuid);
-        attackCooldownBySummon.remove(summonUuid);
-        pendingDamageDelayBySummon.remove(summonUuid);
-        pendingDamageTargetBySummon.remove(summonUuid);
-        attackModeBySummon.remove(summonUuid);
-
+    private void clearTargetForOwner(UUID ownerUuid) {
         focusTargetByOwner.remove(ownerUuid);
-        ownerMaintenanceCooldown.remove(ownerUuid);
-
-        debugCdBySummon.remove(summonUuid);
-        introLogged.remove(summonUuid);
-    }
-
-    // =======================
-    // Debug wrappers (shared)
-    // =======================
-    private boolean shouldLog(float dt, UUID summonUuid, @Nullable String summonId) {
-        return SummonCombatFollowShared.shouldLog(
-                DEBUG, DEBUG_ONLY_SUMMON_ID, DEBUG_LOG_PERIOD_SEC,
-                debugCdBySummon, dt, summonUuid, summonId
-        );
-    }
-
-    private void dbg(UUID summonUuid, @Nullable String summonId, String msg) {
-        SummonCombatFollowShared.dbg(
-                LOGGER, DEBUG, DEBUG_ONLY_SUMMON_ID,
-                LOG_PREFIX, summonUuid, summonId, msg
-        );
-    }
-
-    private void dbgOncePerSummon(float dt, UUID summonUuid, @Nullable String summonId, String msg) {
-        SummonCombatFollowShared.dbgOncePerSummon(
-                LOGGER, DEBUG, DEBUG_ONLY_SUMMON_ID, DEBUG_LOG_PERIOD_SEC,
-                debugCdBySummon, dt, LOG_PREFIX, summonUuid, summonId, msg
-        );
-    }
-
-    private void runSelfTests() {
-        try {
-            ((HytaleLogger.Api) LOGGER.atInfo()).log(
-                    "%s SELF-TEST start. SLOT_BASE=%s",
-                    LOG_PREFIX,
-                    String.valueOf(SLOT_BASE)
-            );
-
-            StringBuilder sb = new StringBuilder();
-            for (AnimationSlot s : AnimationSlot.values()) sb.append(s.name()).append(" ");
-            ((HytaleLogger.Api) LOGGER.atInfo()).log(
-                    "%s AnimationSlot.values(): %s",
-                    LOG_PREFIX,
-                    sb.toString()
-            );
-
-            ((HytaleLogger.Api) LOGGER.atInfo()).log("%s SELF-TEST done.", LOG_PREFIX);
-        } catch (Throwable t) {
-            ((HytaleLogger.Api) LOGGER.atWarning()).log("%s SELF-TEST failed: %s", LOG_PREFIX, String.valueOf(t));
-            if (DEBUG_STACKTRACE) t.printStackTrace();
-        }
     }
 }

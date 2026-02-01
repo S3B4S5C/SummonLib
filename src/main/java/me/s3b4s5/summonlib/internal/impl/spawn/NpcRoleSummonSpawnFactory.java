@@ -15,6 +15,7 @@ import com.hypixel.hytale.server.core.modules.time.WorldTimeResource;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import com.hypixel.hytale.server.npc.NPCPlugin;
 import com.hypixel.hytale.server.npc.entities.NPCEntity;
+import com.hypixel.hytale.server.core.modules.entity.tracker.NetworkId;
 
 import javax.annotation.Nonnull;
 import java.util.UUID;
@@ -93,9 +94,8 @@ public final class NpcRoleSummonSpawnFactory implements SummonSpawnFactory {
 
         holder.addComponent(DisplayNameComponent.getComponentType(), new DisplayNameComponent(Message.raw(roleName)));
 
-        // UUID (igual que spawnEntity)
         holder.ensureComponent(UUIDComponent.getComponentType());
-
+        holder.addComponent(NetworkId.getComponentType(), new NetworkId(store.getExternalData().takeNextNetworkId()));
         if (debug) {
             LOGGER.atInfo().log(
                     "[NpcRoleSummonSpawnFactory] create OK npcRoleId=%s roleIndex=%d roleName=%s pos=%s rotYaw=%.2f scaleOverride=%.2f",

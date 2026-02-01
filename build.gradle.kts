@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "me.s3b4s5"
-version = "1.0.1"
+version = "1.1.0"
 
 java {
     toolchain.languageVersion = JavaLanguageVersion.of(25)

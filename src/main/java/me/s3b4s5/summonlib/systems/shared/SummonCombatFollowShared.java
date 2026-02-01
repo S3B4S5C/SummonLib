@@ -1,4 +1,4 @@
-package me.s3b4s5.summonlib.systems;
+package me.s3b4s5.summonlib.systems.shared;
 
 import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.math.vector.Vector3d;

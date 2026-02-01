@@ -1,7 +1,8 @@
 package me.s3b4s5.summonlib.internal.impl.definition;
 
-import me.s3b4s5.summonlib.internal.impl.spawn.SummonSpawnFactory;
 import me.s3b4s5.summonlib.api.follow.ModelFollowController;
+import me.s3b4s5.summonlib.internal.impl.spawn.SummonSpawnFactory;
+import me.s3b4s5.summonlib.internal.impl.spawn.SummonSpawnPlanFactory;
 
 import javax.annotation.Nullable;
 
@@ -16,13 +17,11 @@ public abstract class SummonDefinition {
     public final boolean requireOwnerLoS;
     public final boolean requireSummonLoS;
 
-    public final ModelFollowController followController;
+    @Nullable public final ModelFollowController followController;
 
-    /** Optional: if provided, SummonActions will use it to build the entity holder. */
-    @Nullable
-    public final SummonSpawnFactory summonSpawnFactory;
+    @Nullable public final SummonSpawnFactory summonSpawnFactory;
+    @Nullable public final SummonSpawnPlanFactory summonSpawnPlanFactory;
 
-    /** NEW: per-summon tuning for follow/combat/leash/hover/perf. Never null. */
     public final SummonTuning tuning;
 
     protected SummonDefinition(
@@ -32,10 +31,11 @@ public abstract class SummonDefinition {
             double detectRadius,
             boolean requireOwnerLoS,
             boolean requireSummonLoS,
-            ModelFollowController followController,
+            @Nullable ModelFollowController followController,
             @Nullable SummonSpawnFactory summonSpawnFactory
     ) {
-        this(id, slotCost, damage, detectRadius, requireOwnerLoS, requireSummonLoS, followController, summonSpawnFactory, null);
+        this(id, slotCost, damage, detectRadius, requireOwnerLoS, requireSummonLoS,
+                followController, summonSpawnFactory, null, null);
     }
 
     protected SummonDefinition(
@@ -45,8 +45,24 @@ public abstract class SummonDefinition {
             double detectRadius,
             boolean requireOwnerLoS,
             boolean requireSummonLoS,
-            ModelFollowController followController,
+            @Nullable ModelFollowController followController,
             @Nullable SummonSpawnFactory summonSpawnFactory,
+            @Nullable SummonTuning tuning
+    ) {
+        this(id, slotCost, damage, detectRadius, requireOwnerLoS, requireSummonLoS,
+                followController, summonSpawnFactory, null, tuning);
+    }
+
+    protected SummonDefinition(
+            String id,
+            int slotCost,
+            float damage,
+            double detectRadius,
+            boolean requireOwnerLoS,
+            boolean requireSummonLoS,
+            @Nullable ModelFollowController followController,
+            @Nullable SummonSpawnFactory summonSpawnFactory,
+            @Nullable SummonSpawnPlanFactory summonSpawnPlanFactory,
             @Nullable SummonTuning tuning
     ) {
         this.id = id;
@@ -57,6 +73,7 @@ public abstract class SummonDefinition {
         this.requireSummonLoS = requireSummonLoS;
         this.followController = followController;
         this.summonSpawnFactory = summonSpawnFactory;
+        this.summonSpawnPlanFactory = summonSpawnPlanFactory;
         this.tuning = SummonTuning.orDefault(tuning);
     }
 }
