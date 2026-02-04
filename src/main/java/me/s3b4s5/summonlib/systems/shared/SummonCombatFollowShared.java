@@ -12,10 +12,6 @@ public final class SummonCombatFollowShared {
 
     private SummonCombatFollowShared() {}
 
-    // =======================
-    // Math / geometry
-    // =======================
-
     public static boolean isWithin(Vector3d a, Vector3d b, double radius) {
         return distSq(a, b) <= radius * radius;
     }
@@ -50,21 +46,10 @@ public final class SummonCombatFollowShared {
         return p;
     }
 
-    public static Vector3d applyOwnerHoverYOffset(Vector3d ownerPos, Vector3d point, double hoverAboveOwner, double maxAboveOwner) {
-        double desiredY = ownerPos.y + hoverAboveOwner;
-        double maxY = ownerPos.y + maxAboveOwner;
-        if (desiredY > maxY) desiredY = maxY;
-        return new Vector3d(point.x, desiredY, point.z);
-    }
-
     public static float computeStartStagger(int idx, int count, float attackInterval) {
         float step = attackInterval / Math.max(1, count);
         return step * Math.max(0, idx);
     }
-
-    // =======================
-    // AnimationSlot resolve
-    // =======================
 
     public static AnimationSlot resolveSlot(String... names) {
         for (String n : names) {
@@ -72,11 +57,6 @@ public final class SummonCombatFollowShared {
         }
         return AnimationSlot.values()[0];
     }
-
-    // =======================
-    // Debug throttle + logging
-    // (idéntico para ambos sistemas)
-    // =======================
 
     public static boolean shouldLog(
             boolean DEBUG,
@@ -104,7 +84,7 @@ public final class SummonCombatFollowShared {
             HytaleLogger logger,
             boolean DEBUG,
             @Nullable String DEBUG_ONLY_SUMMON_ID,
-            String logPrefix, // ej: "[SummonCombatFollowSystem]"
+            String logPrefix,
             UUID summonUuid,
             @Nullable String summonId,
             String msg

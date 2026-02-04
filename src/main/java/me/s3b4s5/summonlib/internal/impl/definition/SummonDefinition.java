@@ -17,13 +17,15 @@ public abstract class SummonDefinition {
     public final boolean requireOwnerLoS;
     public final boolean requireSummonLoS;
 
+    public final double leashSummonToOwner;
+    public final double leashTargetToOwner;
+    public final float ownerMaintenanceCooldownSec;
+
     @Nullable public final ModelFollowController followController;
 
     @Nullable public final SummonSpawnFactory summonSpawnFactory;
     @Nullable public final SummonSpawnPlanFactory summonSpawnPlanFactory;
 
-    public final SummonTuning tuning;
-
     protected SummonDefinition(
             String id,
             int slotCost,
@@ -31,11 +33,15 @@ public abstract class SummonDefinition {
             double detectRadius,
             boolean requireOwnerLoS,
             boolean requireSummonLoS,
+            double leashSummonToOwner,
+            double leashTargetToOwner,
+            float ownerMaintenanceCooldownSec,
             @Nullable ModelFollowController followController,
             @Nullable SummonSpawnFactory summonSpawnFactory
     ) {
         this(id, slotCost, damage, detectRadius, requireOwnerLoS, requireSummonLoS,
-                followController, summonSpawnFactory, null, null);
+                leashSummonToOwner, leashTargetToOwner, ownerMaintenanceCooldownSec,
+                followController, summonSpawnFactory, null);
     }
 
     protected SummonDefinition(
@@ -45,25 +51,12 @@ public abstract class SummonDefinition {
             double detectRadius,
             boolean requireOwnerLoS,
             boolean requireSummonLoS,
+            double leashSummonToOwner,
+            double leashTargetToOwner,
+            float ownerMaintenanceCooldownSec,
             @Nullable ModelFollowController followController,
             @Nullable SummonSpawnFactory summonSpawnFactory,
-            @Nullable SummonTuning tuning
-    ) {
-        this(id, slotCost, damage, detectRadius, requireOwnerLoS, requireSummonLoS,
-                followController, summonSpawnFactory, null, tuning);
-    }
-
-    protected SummonDefinition(
-            String id,
-            int slotCost,
-            float damage,
-            double detectRadius,
-            boolean requireOwnerLoS,
-            boolean requireSummonLoS,
-            @Nullable ModelFollowController followController,
-            @Nullable SummonSpawnFactory summonSpawnFactory,
-            @Nullable SummonSpawnPlanFactory summonSpawnPlanFactory,
-            @Nullable SummonTuning tuning
+            @Nullable SummonSpawnPlanFactory summonSpawnPlanFactory
     ) {
         this.id = id;
         this.slotCost = slotCost;
@@ -71,9 +64,13 @@ public abstract class SummonDefinition {
         this.detectRadius = detectRadius;
         this.requireOwnerLoS = requireOwnerLoS;
         this.requireSummonLoS = requireSummonLoS;
+
+        this.leashSummonToOwner = Math.max(0.0, leashSummonToOwner);
+        this.leashTargetToOwner = Math.max(0.0, leashTargetToOwner);
+        this.ownerMaintenanceCooldownSec = Math.max(0.0f, ownerMaintenanceCooldownSec);
+
         this.followController = followController;
         this.summonSpawnFactory = summonSpawnFactory;
         this.summonSpawnPlanFactory = summonSpawnPlanFactory;
-        this.tuning = SummonTuning.orDefault(tuning);
     }
 }

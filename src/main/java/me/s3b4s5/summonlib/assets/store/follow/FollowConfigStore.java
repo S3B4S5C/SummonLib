@@ -3,8 +3,8 @@ package me.s3b4s5.summonlib.assets.store.follow;
 import com.hypixel.hytale.assetstore.AssetUpdateQuery;
 import com.hypixel.hytale.assetstore.map.IndexedLookupTableAssetMap;
 import com.hypixel.hytale.server.core.asset.HytaleAssetStore;
-import me.s3b4s5.summonlib.assets.config.follow.Follow;
-import me.s3b4s5.summonlib.assets.config.follow.OrbitFollowConfig;
+import me.s3b4s5.summonlib.assets.config.model.follow.Follow;
+import me.s3b4s5.summonlib.assets.config.model.follow.OrbitFollowConfig;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -16,7 +16,6 @@ public final class FollowConfigStore extends HytaleAssetStore<
         Follow,
         IndexedLookupTableAssetMap<String, Follow>> {
 
-    // 👇 Esta es la carpeta ÚNICA que vas a ver/usar para Follow
     private static final String PATH = "Entity/SummonLib/Follow";
 
     private FollowConfigStore(@Nonnull Builder<String, Follow, IndexedLookupTableAssetMap<String, Follow>> builder) {

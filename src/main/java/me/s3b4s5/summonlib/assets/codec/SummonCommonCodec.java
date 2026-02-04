@@ -5,7 +5,6 @@ import com.hypixel.hytale.codec.KeyedCodec;
 import com.hypixel.hytale.codec.builder.BuilderCodec;
 import com.hypixel.hytale.codec.validation.Validators;
 import me.s3b4s5.summonlib.assets.config.BaseSummonConfig;
-import me.s3b4s5.summonlib.internal.impl.definition.SummonTuning;
 
 public final class SummonCommonCodec {
 
@@ -43,10 +42,22 @@ public final class SummonCommonCodec {
                         (o, p) -> o.requireSummonLoS = p.requireSummonLoS
                 ).add()
 
-                .appendInherited(new KeyedCodec<>("Tuning", SummonTuning.CODEC),
-                        (o, v) -> o.tuning = v,
-                        (o) -> o.tuning,
-                        (o, p) -> o.tuning = p.tuning
-                ).add();
+                .appendInherited(new KeyedCodec<>("LeashSummonToOwner", Codec.DOUBLE),
+                        (o, v) -> o.leashSummonToOwner = (v == null ? o.leashSummonToOwner : v),
+                        (o) -> o.leashSummonToOwner,
+                        (o, p) -> o.leashSummonToOwner = p.leashSummonToOwner
+                ).addValidator(Validators.greaterThanOrEqual(0.0)).add()
+
+                .appendInherited(new KeyedCodec<>("LeashTargetToOwner", Codec.DOUBLE),
+                        (o, v) -> o.leashTargetToOwner = (v == null ? o.leashTargetToOwner : v),
+                        (o) -> o.leashTargetToOwner,
+                        (o, p) -> o.leashTargetToOwner = p.leashTargetToOwner
+                ).addValidator(Validators.greaterThanOrEqual(0.0)).add()
+
+                .appendInherited(new KeyedCodec<>("OwnerMaintenanceCooldownSec", Codec.FLOAT),
+                        (o, v) -> o.ownerMaintenanceCooldownSec = (v == null ? o.ownerMaintenanceCooldownSec : v),
+                        (o) -> o.ownerMaintenanceCooldownSec,
+                        (o, p) -> o.ownerMaintenanceCooldownSec = p.ownerMaintenanceCooldownSec
+                ).addValidator(Validators.greaterThanOrEqual(0.0f)).add();
     }
 }

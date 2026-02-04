@@ -19,7 +19,7 @@ import com.hypixel.hytale.server.core.util.TargetUtil;
 import com.hypixel.hytale.server.npc.entities.NPCEntity;
 import com.hypixel.hytale.server.npc.role.Role;
 import com.hypixel.hytale.server.npc.role.support.WorldSupport;
-import me.s3b4s5.summonlib.internal.tick.SummonTickUtil;
+import me.s3b4s5.summonlib.internal.tick.ContextUtil;
 
 import javax.annotation.Nullable;
 import java.util.List;
@@ -40,12 +40,15 @@ public final class SummonTargetSelector {
     // -----------------------
     // Hardcoded role exclusion
     // -----------------------
-    // IMPORTANT: store them in lowercase to avoid allocations in hot loops.
     private static final Set<String> ROLES_EXCLUDED_LOWER = Set.of(
-            "mouse"
-            // add more here, always lowercase:
-            // "villager",
-            // "somefriendlyrole"
+            "mouse",
+            "frog_blue",
+            "frog_green",
+            "frog_orange",
+            "temple_frog_blue",
+            "temple_frog_green",
+            "temple_frog_orange"
+            // always lowercase
     );
 
     // -----------------------
@@ -110,7 +113,7 @@ public final class SummonTargetSelector {
     }
 
     public @Nullable Ref<EntityStore> select(
-            SummonTickUtil.OwnerCtx ownerCtx,
+            ContextUtil.OwnerCtx ownerCtx,
             Store<EntityStore> store,
             Vector3d summonPos,
             double radius,

@@ -25,12 +25,6 @@ public final class BackLineWingFollowController implements ModelFollowController
     private final double minPitchRad;
     private final double maxPitchRad;
 
-    /**
-     * NUEVO:
-     * - Si referenceTotal > 1, normalizamos los spreads como si hubiera al menos referenceTotal invocaciones.
-     * - Ej: referenceTotal=6 => la espada #2 siempre usa t01=1/5 (0.2) aunque sólo haya 2 o 3 invocadas.
-     * - Si referenceTotal <= 1 => comportamiento viejo (depende del groupTotal real).
-     */
     private final int referenceTotal;
 
     public BackLineWingFollowController(
@@ -122,7 +116,10 @@ public final class BackLineWingFollowController implements ModelFollowController
     @Override
     public Vector3d computeHome(Vector3d ownerPos, double yawRad, int groupIndex, int groupTotal) {
         int realCount = Math.max(1, groupTotal);
-        int i = clampI(groupIndex, realCount);
+        int effectiveCount = effectiveCount(realCount);
+
+        int gi = Math.max(0, groupIndex);
+        int i = clampI(gi, effectiveCount); // <-- CLAMP contra effectiveCount, NO realCount
 
         // basis
         double fx = -Math.sin(yawRad);
@@ -130,15 +127,11 @@ public final class BackLineWingFollowController implements ModelFollowController
         double rx =  Math.cos(yawRad);
         double rz = -Math.sin(yawRad);
 
-        // >>> clave: spreads normalizados con effectiveCount (no con realCount)
-        int effectiveCount = effectiveCount(realCount);
-        double t01 = (effectiveCount <= 1) ? 0.0 : (i / (double)(effectiveCount - 1)); // 0..1 “como si fuera 6”
+        double t01 = (effectiveCount <= 1) ? 0.0 : (i / (double)(effectiveCount - 1));
         double s = signedParam(t01);
 
-        // fila detrás
         double back = baseBack + stepBack * i;
 
-        // ala: side + altura (curva)
         double side = s * sideSpread;
 
         double curve = 1.0 - Math.abs(s);
@@ -150,6 +143,7 @@ public final class BackLineWingFollowController implements ModelFollowController
 
         return new Vector3d(x, y, z);
     }
+
 
     @Override
     public Vector3d computeAttackAnchor(Vector3d targetPos, int globalIndex, int globalTotal) {
@@ -166,9 +160,11 @@ public final class BackLineWingFollowController implements ModelFollowController
     @Override
     public double homeYawOffsetRad(int groupIndex, int groupTotal) {
         int realCount = Math.max(1, groupTotal);
-        int i = clampI(groupIndex, realCount);
-
         int effectiveCount = effectiveCount(realCount);
+
+        int gi = Math.max(0, groupIndex);
+        int i = clampI(gi, effectiveCount);
+
         double t01 = (effectiveCount <= 1) ? 0.0 : (i / (double)(effectiveCount - 1));
         double s = signedParam(t01);
         return s * yawSpreadRad;
@@ -177,20 +173,25 @@ public final class BackLineWingFollowController implements ModelFollowController
     @Override
     public double homeRollOffsetRad(int groupIndex, int groupTotal) {
         int realCount = Math.max(1, groupTotal);
-        int i = clampI(groupIndex, realCount);
-
         int effectiveCount = effectiveCount(realCount);
+
+        int gi = Math.max(0, groupIndex);
+        int i = clampI(gi, effectiveCount);
+
         double t01 = (effectiveCount <= 1) ? 0.0 : (i / (double)(effectiveCount - 1));
         double s = signedParam(t01);
         return s * rollSpreadRad;
     }
 
+
     @Override
     public double homePitchOffsetRad(int groupIndex, int groupTotal) {
         int realCount = Math.max(1, groupTotal);
-        int i = clampI(groupIndex, realCount);
-
         int effectiveCount = effectiveCount(realCount);
+
+        int gi = Math.max(0, groupIndex);
+        int i = clampI(gi, effectiveCount);
+
         double t01 = (effectiveCount <= 1) ? 0.0 : (i / (double)(effectiveCount - 1));
         double s = signedParam(t01);
         return s * pitchSpreadRad;

@@ -1,9 +1,9 @@
 package me.s3b4s5.summonlib.internal.movement;
 
-import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;
 import me.s3b4s5.summonlib.api.follow.OwnerPitchClamp;
+import me.s3b4s5.summonlib.api.follow.HomeRotationOffsets;
 
 public final class LerpTransformMovement implements SummonMovement {
 
@@ -17,40 +17,62 @@ public final class LerpTransformMovement implements SummonMovement {
         ));
     }
 
+    // Compat: deja el viejo por si otros sistemas lo usan
     @Override
     public void faceOwner(TransformComponent t, Object ownerRotationObj, double ownerYawRad, Object controller) {
-        // Default clamp (radians) — matches your previous hardcode
+        faceOwner(t, ownerRotationObj, ownerYawRad, controller, 0, 1);
+    }
+
+    // NUEVO: aplica clamp y luego spread offsets
+    public void faceOwner(
+            TransformComponent t,
+            Object ownerRotationObj,
+            double ownerYawRad,
+            Object controller,
+            int groupIndex,
+            int groupTotal
+    ) {
         double minPitch = -0.6;
         double maxPitch = 0.55;
 
-        // If the active formation/controller provides a clamp, use it
         OwnerPitchClamp clamp = (controller instanceof OwnerPitchClamp c) ? c : null;
+        HomeRotationOffsets offsets = (controller instanceof HomeRotationOffsets o) ? o : null;
+
+        // Base owner rot
+        double pitchRad;
+        double yawRad;
+        double rollRad;
 
         if (ownerRotationObj instanceof com.hypixel.hytale.math.vector.Vector3f v) {
-            // IMPORTANT: in your codebase this pitch/yaw/roll are already treated as radians
-            double pitchRad = v.getPitch();
-            double yawRad   = v.getYaw();
-            double rollRad  = v.getRoll();
-
-
-            double clampedPitch = (clamp != null)
-                    ? clamp.clampOwnerPitch(pitchRad)
-                    : clamp(pitchRad, minPitch, maxPitch);
-
-            var rot = t.getRotation();
-            rot.setPitch((float) clampedPitch);
-            rot.setYaw((float) yawRad);
-            rot.setRoll((float) rollRad);
-            return;
+            pitchRad = v.getPitch();
+            yawRad   = v.getYaw();
+            rollRad  = v.getRoll();
+        } else {
+            pitchRad = 0.0;
+            yawRad   = ownerYawRad;
+            rollRad  = 0.0;
         }
 
-        // Fallback: we don't have full rotation, keep yaw and neutral pitch/roll.
-        var rot = t.getRotation();
-        rot.setPitch(0f);
-        rot.setYaw((float) ownerYawRad);
-        rot.setRoll(0f);
-    }
+        // 1) clamp primero (como querías)
+        double clampedPitch = (clamp != null)
+                ? clamp.clampOwnerPitch(pitchRad)
+                : clamp(pitchRad, minPitch, maxPitch);
 
+        // 2) luego offsets (spread)
+        if (offsets != null) {
+            int gi = Math.max(0, groupIndex);
+            int gt = Math.max(1, groupTotal);
+
+            yawRad   += offsets.homeYawOffsetRad(gi, gt);
+            rollRad  += offsets.homeRollOffsetRad(gi, gt);
+            clampedPitch += offsets.homePitchOffsetRad(gi, gt);
+        }
+
+        var rot = t.getRotation();
+        rot.setPitch((float) clampedPitch);
+        rot.setYaw((float) yawRad);
+        rot.setRoll((float) rollRad);
+    }
 
     @Override
     public void faceTarget(TransformComponent t, Vector3d from, Vector3d to) {

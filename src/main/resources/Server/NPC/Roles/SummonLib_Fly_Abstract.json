@@ -1,0 +1,238 @@
+{
+  "Type": "Abstract",
+  "StartState": "Idle",
+  "Parameters": {
+    "Appearance": {
+      "Value": "Bat_Test"
+    },
+    "Attack": {
+      "Value": "Root_NPC_Attack_Melee"
+    },
+    "AttackDistance": {
+      "Value": 2
+    },
+    "DesiredAttackDistanceRange": {
+      "Value": [
+        1.5,
+        1.5
+      ]
+    },
+    "AttackPauseRange": {
+      "Value": [
+        0.2,
+        0.2
+      ]
+    },
+    "OrbitRadius": {
+      "Value": 1.5
+    },
+    "ChaseStopDistance": {
+      "Value": 1.5
+    },
+    "FollowLeashRange": {
+      "Value": 5
+    },
+    "MaxHealth": {
+      "Value": 100
+    },
+    "DisableDamageGroups": {
+      "Value": [
+        "Self",
+        "Player"
+      ]
+    },
+    "NameTranslationKey": {
+      "Value": "server.npcRoles.Summon.name"
+    }
+  },
+  "Appearance": {
+    "Compute": "Appearance"
+  },
+  "MaxHealth": {
+    "Compute": "MaxHealth"
+  },
+  "DisableDamageGroups": {
+    "Compute": "DisableDamageGroups"
+  },
+  "DefaultNPCAttitude": "Ignore",
+  "DefaultPlayerAttitude": "Ignore",
+  "KnockbackScale": 0,
+  "BusyStates": [
+    "Idle",
+    "Combat"
+  ],
+  "MotionControllerList": [
+    {
+      "Type": "Fly",
+      "MaxHorizontalSpeed": 20,
+      "MaxSinkSpeed": 10,
+      "MaxClimbSpeed": 12,
+      "MinAirSpeed": 4,
+      "Acceleration": 5,
+      "Deceleration": 8,
+      "MaxRollAngle": 180,
+      "MaxTurnSpeed": 360,
+      "AutoLevel": true,
+      "MinHeightOverGround": 0,
+      "MaxHeightOverGround": 64,
+      "DesiredAltitudeWeight": 0.35
+    }
+  ],
+  "Instructions": [
+    {
+      "Instructions": [
+        {
+          "Sensor": {
+            "Type": "State",
+            "State": "Idle"
+          },
+          "Instructions": [
+            {
+              "$Comment": "Follow leash when idle (leash updated from code).",
+              "Continue": false,
+              "Sensor": {
+                "Type": "Leash",
+                "Range": {
+                  "Compute": "FollowLeashRange"
+                }
+              },
+              "HeadMotion": {
+                "Type": "Nothing"
+              },
+              "BodyMotion": {
+                "Type": "Seek",
+                "SlowDownDistance": 3.0,
+                "StopDistance": 1.4,
+                "RelativeSpeed": 0.7
+              }
+            },
+            {
+              "$Comment": "Auto-enter Combat when there is a target.",
+              "Continue": false,
+              "Sensor": {
+                "Type": "Target",
+                "Range": 999999
+              },
+              "Actions": [
+                {
+                  "Type": "State",
+                  "State": "Combat"
+                }
+              ]
+            },
+            {
+              "$Comment": "Fallback only if nothing else matched.",
+              "HeadMotion": {
+                "Type": "Nothing"
+              },
+              "BodyMotion": {
+                "Type": "Nothing"
+              }
+            }
+          ]
+        },
+        {
+          "Sensor": {
+            "Type": "State",
+            "State": "Combat"
+          },
+          "Instructions": [
+            {
+              "$Comment": "If target is gone, return to Idle.",
+              "Continue": false,
+              "Sensor": {
+                "Type": "Not",
+                "Sensor": {
+                  "Type": "Target"
+                }
+              },
+              "Actions": [
+                {
+                  "Type": "ReleaseTarget"
+                },
+                {
+                  "Type": "State",
+                  "State": "Idle"
+                }
+              ]
+            },
+            {
+              "$Comment": "Keep leash anchored to current target (altitude helper).",
+              "Continue": true,
+              "Sensor": {
+                "Type": "Target",
+                "Range": 999999
+              },
+              "Actions": [
+                {
+                  "Type": "SetLeashPosition",
+                  "ToTarget": true
+                }
+              ]
+            },
+            {
+              "$Comment": "Attack when in range + LoS.",
+              "Continue": false,
+              "Sensor": {
+                "Type": "Target",
+                "Range": {
+                  "Compute": "AttackDistance"
+                },
+                "Filters": [
+                  {
+                    "Type": "LineOfSight"
+                  }
+                ]
+              },
+              "ActionsBlocking": true,
+              "Actions": [
+                {
+                  "Type": "Attack",
+                  "Attack": {
+                    "Compute": "Attack"
+                  },
+                  "AttackPauseRange": {
+                    "Compute": "AttackPauseRange"
+                  }
+                }
+              ],
+              "HeadMotion": {
+                "Type": "Aim"
+              },
+              "BodyMotion": {
+                "Type": "WanderInCircle",
+                "Radius": {
+                  "Compute": "OrbitRadius"
+                },
+                "MaxHeadingChange": 60,
+                "RelativeSpeed": 0.25
+              }
+            },
+            {
+              "$Comment": "Chase target directly.",
+              "Continue": false,
+              "Sensor": {
+                "Type": "Target",
+                "Range": 999999
+              },
+              "HeadMotion": {
+                "Type": "Watch"
+              },
+              "BodyMotion": {
+                "Type": "Seek",
+                "SlowDownDistance": 3.5,
+                "StopDistance": {
+                  "Compute": "ChaseStopDistance"
+                },
+                "RelativeSpeed": 0.7
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "NameTranslationKey": {
+    "Compute": "NameTranslationKey"
+  }
+}

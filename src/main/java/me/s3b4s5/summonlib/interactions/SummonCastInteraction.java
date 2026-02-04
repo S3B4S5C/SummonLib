@@ -85,29 +85,58 @@ public class SummonCastInteraction extends Interaction {
             @Nonnull InteractionContext context,
             @NonNullDecl CooldownHandler cooldownHandler
     ) {
-        if (!firstRun) return; // Run once per cast
+        if (!firstRun) return;
 
         Ref<EntityStore> entityRef = context.getEntity();
-        if (entityRef == null || !entityRef.isValid()) return;
-
-        CommandBuffer<EntityStore> cb = context.getCommandBuffer();
-        if (cb == null) return;
-
-        Store<EntityStore> store = entityRef.getStore();
-        UUID ownerUuid = cb.getComponent(entityRef, com.hypixel.hytale.server.core.entity.UUIDComponent.getComponentType()).getUuid();
-
-        if (DEBUG) {
-            LOGGER.atInfo().log("[SummonCast] type=%s mode=%s summonId=%s amount=%d owner=%s",
-                    type, mode, summonId, amount, ownerUuid);
+        if (entityRef == null || !entityRef.isValid()) {
+            if (DEBUG) LOGGER.atWarning().log("[SummonCast] invalid entityRef");
+            return;
         }
 
-        SummonActions.Mode m = switch (mode) {
-            case ADD -> SummonActions.Mode.ADD;
-            case SET -> SummonActions.Mode.SET;
-            case CLEAR -> SummonActions.Mode.CLEAR;
-        };
+        CommandBuffer<EntityStore> cb = context.getCommandBuffer();
+        if (cb == null) {
+            if (DEBUG) LOGGER.atWarning().log("[SummonCast] null CommandBuffer");
+            return;
+        }
 
-        SummonActions.cast(store, cb, ownerUuid, entityRef, summonId, amount, m);
+        Store<EntityStore> store = entityRef.getStore();
+        if (store == null) {
+            if (DEBUG) LOGGER.atWarning().log("[SummonCast] null Store (entityRef=%s)", entityRef);
+            return;
+        }
+
+        try {
+            var uuidType = com.hypixel.hytale.server.core.entity.UUIDComponent.getComponentType();
+            var uuidComp = cb.getComponent(entityRef, uuidType);
+            if (uuidComp == null) uuidComp = store.getComponent(entityRef, uuidType);
+
+            if (uuidComp == null) {
+                LOGGER.atWarning().log("[SummonCast] UUIDComponent missing on caster entityRef=%s", entityRef);
+                return;
+            }
+
+            UUID ownerUuid = uuidComp.getUuid();
+
+            if (DEBUG) {
+                LOGGER.atInfo().log("[SummonCast] type=%s mode=%s summonId=%s amount=%d owner=%s",
+                        type, mode, summonId, amount, ownerUuid);
+            }
+
+            SummonActions.Mode m = switch (mode) {
+                case ADD -> SummonActions.Mode.ADD;
+                case SET -> SummonActions.Mode.SET;
+                case CLEAR -> SummonActions.Mode.CLEAR;
+            };
+
+            // Antes/después (para ver si se “traga” el cast sin error)
+            if (DEBUG) LOGGER.atInfo().log("[SummonCast] calling SummonActions.cast(...)");
+            SummonActions.cast(store, cb, ownerUuid, entityRef, summonId, amount, m);
+            if (DEBUG) LOGGER.atInfo().log("[SummonCast] cast() returned");
+
+        } catch (Throwable t) {
+            LOGGER.atSevere().log("[SummonCast] EXCEPTION: %s", String.valueOf(t));
+            t.printStackTrace();
+        }
     }
 
     @Override

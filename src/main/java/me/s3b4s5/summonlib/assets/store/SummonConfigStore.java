@@ -5,10 +5,9 @@ import com.hypixel.hytale.assetstore.map.IndexedLookupTableAssetMap;
 import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.server.core.asset.HytaleAssetStore;
 import me.s3b4s5.summonlib.api.SummonRegistry;
-import me.s3b4s5.summonlib.assets.config.ModelSummonConfig;
+import me.s3b4s5.summonlib.assets.config.model.ModelSummonConfig;
 import me.s3b4s5.summonlib.assets.config.SummonConfig;
 import me.s3b4s5.summonlib.internal.impl.definition.SummonDefinition;
-import me.s3b4s5.summonlib.internal.impl.definition.SummonTuning;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -84,7 +83,6 @@ public final class SummonConfigStore extends HytaleAssetStore<
         cfg.detectRadius = 0.0;
         cfg.requireOwnerLoS = true;
         cfg.requireSummonLoS = true;
-        cfg.tuning = SummonTuning.DEFAULT;
 
         // Follow default (single id now)
         cfg.followId = "";
