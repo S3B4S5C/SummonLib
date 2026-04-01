@@ -93,7 +93,7 @@ public final class SummonSpawnService {
         }
 
         int currentThisType = 0;
-        if (mode != SummonMode.CLEAR && definition != null && definition.slotCost > 0) {
+        if (mode != SummonMode.CLEAR && definition.slotCost > 0) {
             currentThisType = usedSlotsThisType / definition.slotCost;
         }
 
@@ -196,7 +196,6 @@ public final class SummonSpawnService {
         pos.y += 0.5;
 
         World world = store.getExternalData().getWorld();
-        if (world == null) return;
 
         if (definition.summonSpawnPlanFactory != null) {
             List<Holder<EntityStore>> plan = definition.summonSpawnPlanFactory.createPlan(
@@ -274,7 +273,7 @@ public final class SummonSpawnService {
             if (tag == null || !ownerUuid.equals(tag.owner) || !summonId.equals(tag.summonId)) continue;
 
             int slotCost = Math.max(0, tag.slotCost);
-            if (slotCost <= 0) continue;
+            if (slotCost == 0) continue;
 
             cb.removeEntity(ref, RemoveReason.REMOVE);
             removedSlots += slotCost;

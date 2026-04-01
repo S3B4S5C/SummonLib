@@ -30,7 +30,7 @@ public final class WormChargeMovement {
         Vector3d sd = (smoothDirNorm == null) ? dd : smoothDirNorm;
 
         // steering smoothing
-        double a = clamp(dt * steer, 0.0, 1.0);
+        double a = clamp(dt * steer);
         sd = new Vector3d(
                 sd.x + (dd.x - sd.x) * a,
                 sd.y + (dd.y - sd.y) * a,
@@ -57,8 +57,8 @@ public final class WormChargeMovement {
         return new Vector3d(v.x*inv, v.y*inv, v.z*inv);
     }
 
-    private static double clamp(double v, double a, double b) {
-        return (v < a) ? a : (v > b) ? b : v;
+    private static double clamp(double v) {
+        return (v < 0.0) ? 0.0 : Math.min(v, 1.0);
     }
 }
 

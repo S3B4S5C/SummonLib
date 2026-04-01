@@ -16,12 +16,6 @@ public final class SummonMath {
         return dx * dx + dy * dy + dz * dz;
     }
 
-    public static double distSqXZ(Vector3d a, Vector3d b) {
-        double dx = b.x - a.x;
-        double dz = b.z - a.z;
-        return dx * dx + dz * dz;
-    }
-
     public static float computeStartStagger(int idx, int count, float attackInterval) {
         float step = attackInterval / Math.max(1, count);
         return step * Math.max(0, idx);

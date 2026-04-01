@@ -27,7 +27,7 @@ public abstract class NpcMotionControllerConfig
                     (t) -> t.id,
                     (t, data) -> t.data = data,
                     (t) -> t.data,
-                    true // allowDefault
+                    true
             );
 
     private static AssetStore<String, NpcMotionControllerConfig, IndexedLookupTableAssetMap<String, NpcMotionControllerConfig>> ASSET_STORE;
@@ -43,9 +43,6 @@ public abstract class NpcMotionControllerConfig
         return getAssetStore().getAssetMap();
     }
 
-    // -------------------------
-    // Asset identity (shared)
-    // -------------------------
     public String id = "";
     public AssetExtraInfo.Data data;
     public boolean unknown;

@@ -4,7 +4,6 @@ import com.hypixel.hytale.component.ArchetypeChunk;
 import com.hypixel.hytale.component.CommandBuffer;
 import com.hypixel.hytale.component.ComponentType;
 import com.hypixel.hytale.component.Ref;
-import com.hypixel.hytale.component.RemoveReason;
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.component.query.Query;
 import com.hypixel.hytale.component.system.tick.EntityTickingSystem;
@@ -26,17 +25,14 @@ import me.s3b4s5.summonlib.internal.targeting.SummonTargetSelector;
 import me.s3b4s5.summonlib.internal.context.OwnerContextResolver;
 import me.s3b4s5.summonlib.internal.context.SummonContextResolver;
 import me.s3b4s5.summonlib.internal.definition.ModelSummonDefinition;
-import me.s3b4s5.summonlib.internal.runtime.SummonIndexing;
 import me.s3b4s5.summonlib.internal.runtime.service.SummonRuntimeServices;
-import me.s3b4s5.summonlib.stats.SummonStats;
 import me.s3b4s5.summonlib.systems.shared.SummonAnimationSlots;
 import me.s3b4s5.summonlib.systems.shared.SummonMath;
 import me.s3b4s5.summonlib.internal.component.SummonComponent;
+import me.s3b4s5.summonlib.systems.shared.SummonOwnerSlotMaintenance;
 import org.checkerframework.checker.nullness.compatqual.NonNullDecl;
 
 import javax.annotation.Nullable;
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -60,8 +56,6 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
 
     private final ComponentType<EntityStore, SummonComponent> summonTagType;
     private final ComponentType<EntityStore, WormComponent> wormTagType;
-
-    private static final boolean DEBUG = false;
 
     private final ConcurrentHashMap<UUID, Ref<EntityStore>> lastTargetBySummon = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Float> startDelayBySummon = new ConcurrentHashMap<>();
@@ -497,49 +491,14 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
             Ref<EntityStore> ownerRef,
             UUID ownerUuid
     ) {
-        final int capSlots = SummonStats.getMaxSlots(store, ownerRef);
-
-        final ArrayList<Ref<EntityStore>> refs = new ArrayList<>();
-        final Query<EntityStore> q = Query.and(
+        SummonOwnerSlotMaintenance.enforceGlobalSlotsAndRebuild(
+                store,
+                cb,
+                ownerRef,
+                ownerUuid,
                 summonTagType,
-                UUIDComponent.getComponentType(),
-                NetworkId.getComponentType(),
-                TransformComponent.getComponentType()
+                targetSelector
         );
-
-        store.forEachChunk(q, (chunk, ccb) -> {
-            for (int i = 0; i < chunk.size(); i++) {
-                final SummonComponent t = chunk.getComponent(i, summonTagType);
-                if (t == null) continue;
-                if (!ownerUuid.equals(t.owner)) continue;
-                refs.add(chunk.getReferenceTo(i));
-            }
-        });
-
-        int usedSlots = 0;
-        for (Ref<EntityStore> r : refs) {
-            final SummonComponent t = store.getComponent(r, summonTagType);
-            if (t != null) usedSlots += Math.max(0, t.slotCost);
-        }
-
-        refs.sort(Comparator.comparingLong((Ref<EntityStore> r) -> {
-            final SummonComponent t = store.getComponent(r, summonTagType);
-            return (t != null) ? t.spawnSeq : Long.MIN_VALUE;
-        }).reversed());
-
-        while (usedSlots > capSlots && !refs.isEmpty()) {
-            final Ref<EntityStore> r = refs.removeFirst();
-            final SummonComponent t = store.getComponent(r, summonTagType);
-            if (t != null) usedSlots -= Math.max(0, t.slotCost);
-            cb.removeEntity(r, RemoveReason.REMOVE);
-        }
-
-        SummonIndexing.rebuildOwnerIndices(store, cb, summonTagType, ownerUuid, refs);
-
-        final Ref<EntityStore> focus = SummonRuntimeServices.targets().pullAggroOrFocus(store, ownerUuid, summonTagType);
-        if (focus != null && (!focus.isValid() || !targetSelector.isAlive(focus, store))) {
-            SummonRuntimeServices.targets().clearRuntimeTarget(ownerUuid);
-        }
     }
 }
 

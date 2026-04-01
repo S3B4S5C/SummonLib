@@ -3,7 +3,6 @@ package me.s3b4s5.summonlib.systems.shared;
 import com.hypixel.hytale.builtin.adventure.teleporter.interaction.server.UsedTeleporter;
 import com.hypixel.hytale.component.ArchetypeChunk;
 import com.hypixel.hytale.component.CommandBuffer;
-import com.hypixel.hytale.component.ComponentType;
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.component.query.Query;
@@ -12,7 +11,6 @@ import com.hypixel.hytale.server.core.entity.UUIDComponent;
 import com.hypixel.hytale.server.core.entity.entities.Player;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import me.s3b4s5.summonlib.lifecycle.SummonOwnerLifecycle;
-import me.s3b4s5.summonlib.internal.component.SummonComponent;
 import org.checkerframework.checker.nullness.compatqual.NonNullDecl;
 
 import javax.annotation.Nullable;
@@ -50,7 +48,7 @@ public class DespawnSummonsOnTeleportSystem extends EntityTickingSystem<EntitySt
             @NonNullDecl CommandBuffer<EntityStore> cb
     ) {
         final Ref<EntityStore> ownerRef = chunk.getReferenceTo(index);
-        if (ownerRef == null || !ownerRef.isValid()) {
+        if (!ownerRef.isValid()) {
             return;
         }
 
@@ -60,11 +58,8 @@ public class DespawnSummonsOnTeleportSystem extends EntityTickingSystem<EntitySt
         }
 
         final UUID ownerUuid = ownerUuidComp.getUuid();
-        if (ownerUuid == null) {
-            return;
-        }
 
-        ownerLifecycle.cleanupAfterTeleport(store, cb, ownerRef, ownerUuid);
+        ownerLifecycle.cleanupAfterTeleport(store, cb, ownerUuid);
     }
 }
 

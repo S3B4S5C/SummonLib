@@ -11,10 +11,8 @@ public final class OrbitFormationFollowBehavior implements ModelFollowBehavior, 
     private final double radius;
     private final double spreadDeg;
     private final double baseHeight;
-
     private final double orbitRadius;
     private final double attackHeight;
-
     private final double minPitchRad;
     private final double maxPitchRad;
 
@@ -26,7 +24,6 @@ public final class OrbitFormationFollowBehavior implements ModelFollowBehavior, 
             double orbitRadius,
             double attackHeight
     ) {
-        // Default clamp (tune as you like)
         this(baseBack, radius, spreadDeg, baseHeight, orbitRadius, attackHeight, -0.6, 0.55);
     }
 
@@ -46,60 +43,49 @@ public final class OrbitFormationFollowBehavior implements ModelFollowBehavior, 
         this.baseHeight = baseHeight;
         this.orbitRadius = orbitRadius;
         this.attackHeight = attackHeight;
-
         this.minPitchRad = Math.min(minPitchRad, maxPitchRad);
         this.maxPitchRad = Math.max(minPitchRad, maxPitchRad);
     }
 
     @Override
     public double clampOwnerPitch(double pitchRad) {
-        if (pitchRad < minPitchRad) return minPitchRad;
-        if (pitchRad > maxPitchRad) return maxPitchRad;
-        return pitchRad;
+        return FollowBehaviorSupport.clampPitch(pitchRad, minPitchRad, maxPitchRad);
     }
 
     @Override
     public Vector3d computeHome(Vector3d ownerPos, double yawRad, int groupIndex, int groupTotal) {
-        int count = Math.max(1, groupTotal);
-        int i = Math.max(0, groupIndex);
+        FollowBehaviorSupport.YawBasis basis = FollowBehaviorSupport.yawBasis(yawRad);
 
-        double fx = -Math.sin(yawRad);
-        double fz = -Math.cos(yawRad);
-        double rx =  Math.cos(yawRad);
-        double rz = -Math.sin(yawRad);
+        double t01 = FollowBehaviorSupport.normalizedIndex01(groupIndex, groupTotal, 0.5);
+        double angleRad = Math.toRadians(-spreadDeg / 2.0 + spreadDeg * t01);
 
-        double t01 = (count <= 1) ? 0.5 : (i / (double) (count - 1));
-        double ang = Math.toRadians(-spreadDeg / 2.0 + spreadDeg * t01);
-        double side = Math.sin(ang) * radius;
+        double side = Math.sin(angleRad) * radius;
 
-        double half = Math.toRadians(spreadDeg / 2.0);
-        double cMin = Math.cos(half);
-        double bump = (Math.cos(ang) - cMin) / (1.0 - cMin);
-        bump = Math.max(0.0, Math.min(1.0, bump));
+        double halfSpreadRad = Math.toRadians(spreadDeg / 2.0);
+        double minCos = Math.cos(halfSpreadRad);
+        double denom = 1.0 - minCos;
 
-        double extraBack = bump * (radius * 0.6);
-        double back = baseBack + extraBack;
+        double bump = denom <= 0.0
+                ? 0.0
+                : Math.clamp((Math.cos(angleRad) - minCos) / denom, 0.0, 1.0);
 
-        double x = ownerPos.x + (-fx) * back + rx * side;
-        double z = ownerPos.z + (-fz) * back + rz * side;
-        double y = ownerPos.y + baseHeight;
+        double back = baseBack + bump * (radius * 0.6);
 
-        return new Vector3d(x, y, z);
+        return new Vector3d(
+                ownerPos.x + (-basis.fx()) * back + basis.rx() * side,
+                ownerPos.y + baseHeight,
+                ownerPos.z + (-basis.fz()) * back + basis.rz() * side
+        );
     }
 
     @Override
     public Vector3d computeAttackAnchor(Vector3d targetPos, int globalIndex, int globalTotal) {
-        int total = Math.max(1, globalTotal);
-        int i = Math.max(0, globalIndex);
-
-        double ang = (total <= 1) ? 0.0 : (Math.PI * 2.0) * (i / (double) total);
-
-        double x = targetPos.x + Math.cos(ang) * orbitRadius;
-        double z = targetPos.z + Math.sin(ang) * orbitRadius;
-        double y = targetPos.y + attackHeight;
-
-        return new Vector3d(x, y, z);
+        return FollowBehaviorSupport.computeCircularAttackAnchor(
+                targetPos,
+                globalIndex,
+                globalTotal,
+                orbitRadius,
+                attackHeight
+        );
     }
 }
-
-

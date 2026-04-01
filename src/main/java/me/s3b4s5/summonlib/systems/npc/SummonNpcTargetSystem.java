@@ -4,7 +4,6 @@ import com.hypixel.hytale.component.ArchetypeChunk;
 import com.hypixel.hytale.component.CommandBuffer;
 import com.hypixel.hytale.component.ComponentType;
 import com.hypixel.hytale.component.Ref;
-import com.hypixel.hytale.component.RemoveReason;
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.component.query.Query;
 import com.hypixel.hytale.component.system.tick.EntityTickingSystem;
@@ -24,10 +23,9 @@ import me.s3b4s5.summonlib.internal.targeting.SummonTargetSelector;
 import me.s3b4s5.summonlib.internal.context.NpcLeashSupport;
 import me.s3b4s5.summonlib.internal.context.NpcTargetingSupport;
 import me.s3b4s5.summonlib.internal.context.SummonContextResolver;
-import me.s3b4s5.summonlib.internal.runtime.SummonIndexing;
 import me.s3b4s5.summonlib.internal.runtime.service.SummonRuntimeServices;
-import me.s3b4s5.summonlib.stats.SummonStats;
 import me.s3b4s5.summonlib.internal.component.SummonComponent;
+import me.s3b4s5.summonlib.systems.shared.SummonOwnerSlotMaintenance;
 import org.checkerframework.checker.nullness.compatqual.NonNullDecl;
 
 import java.util.ArrayList;
@@ -276,7 +274,7 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
         Vector3d anchor = ownerPos;
         Vector3d formationOffset = Vector3d.ZERO;
 
-        if (formation != null && formation.enabled) {
+        if (formation != null && formation.enabled()) {
             FormationResult fr = getFormationFollow(ownerUuid, selfRef, store, ownerPos, dt, formation);
             anchor = fr.anchor;
             formationOffset = fr.offset;
@@ -338,11 +336,11 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
             float dt,
             NpcRoleSummonDefinition.Formation formation
     ) {
-        if (ownerUuid == null || selfRef == null || formation == null || !formation.enabled) {
+        if (ownerUuid == null || selfRef == null || formation == null || !formation.enabled()) {
             return new FormationResult(ownerPos, Vector3d.ZERO);
         }
 
-        FormationCache cache = formationByOwner.computeIfAbsent(ownerUuid, k -> new FormationCache());
+        FormationCache cache = formationByOwner.computeIfAbsent(ownerUuid, _ -> new FormationCache());
         long h = hashFormation(formation);
 
         if (cache.configHash != h) {
@@ -353,7 +351,7 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
                     cache.slotIndexByRef.clear();
                     cache.currentOffsetByRef.clear();
                     cache.lastCount = 0;
-                    cache.ringCap = Math.max(1, formation.ringCap);
+                    cache.ringCap = Math.max(1, formation.ringCap());
                     cache.formationYaw = Double.NaN;
                     cache.hasOwnerPos = false;
                 }
@@ -370,7 +368,7 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
         }
 
         Vector3d desired = computeDesiredOffset(slotIndex, cache.lastCount, cache.ringCap, cache.formationYaw, selfRef, formation);
-        Vector3d current = cache.currentOffsetByRef.computeIfAbsent(selfRef, k -> desired.clone());
+        Vector3d current = cache.currentOffsetByRef.computeIfAbsent(selfRef, _ -> desired.clone());
 
         smoothOffset(current, desired, dt, formation);
         cache.currentOffsetByRef.put(selfRef, current);
@@ -392,9 +390,9 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
 
         cache.lastOwnerPos.assign(ownerPos);
 
-        if (dist < f.anchorDeadzone) return;
+        if (dist < f.anchorDeadzone()) return;
 
-        double alpha = 1.0 - Math.exp(-f.anchorSmoothK * dt);
+        double alpha = 1.0 - Math.exp(-f.anchorSmoothK() * dt);
         cache.anchorPos.x += (ownerPos.x - cache.anchorPos.x) * alpha;
         cache.anchorPos.z += (ownerPos.z - cache.anchorPos.z) * alpha;
         cache.anchorPos.y = ownerPos.y;
@@ -412,17 +410,17 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
         double vz = cache.lastOwnerPos.z - cache.anchorPos.z;
 
         double len = Math.sqrt(vx * vx + vz * vz);
-        if (len < f.minMoveDist) return;
+        if (len < f.minMoveDist()) return;
 
         double desiredYaw = Math.atan2(vx, vz);
         cache.formationYaw = smoothYaw(cache.formationYaw, desiredYaw, dt, f);
     }
 
     private double smoothYaw(double current, double desired, float dt, NpcRoleSummonDefinition.Formation f) {
-        double alpha = 1.0 - Math.exp(-f.yawSmoothK * dt);
+        double alpha = 1.0 - Math.exp(-f.yawSmoothK() * dt);
         double delta = turnAngle(current, desired);
 
-        double maxStep = f.maxTurnSpeed * dt;
+        double maxStep = f.maxTurnSpeed() * dt;
         if (delta > maxStep) delta = maxStep;
         if (delta < -maxStep) delta = -maxStep;
 
@@ -451,7 +449,7 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
             NpcRoleSummonDefinition.Formation f
     ) {
         final long now = System.nanoTime();
-        final long intervalNs = (long) (Math.max(0.0f, f.rebuildIntervalSec) * 1_000_000_000L);
+        final long intervalNs = (long) (Math.max(0.0f, f.rebuildIntervalSec()) * 1_000_000_000L);
 
         boolean timeExpired = intervalNs > 0L && (now - cache.lastBuildNs) > intervalNs;
         boolean missingSelf = !cache.slotIndexByRef.containsKey(selfRef);
@@ -478,7 +476,7 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
     ) {
         final ArrayList<FormationEntry> list = new ArrayList<>();
 
-        store.forEachChunk(formationQuery, (c, ccb) -> {
+        store.forEachChunk(formationQuery, (c, _) -> {
             for (int i = 0; i < c.size(); i++) {
                 SummonComponent tag = c.getComponent(i, summonTagType);
                 if (tag == null) continue;
@@ -495,7 +493,7 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
             cache.slotIndexByRef.clear();
             cache.currentOffsetByRef.clear();
             cache.lastCount = 0;
-            cache.ringCap = Math.max(1, f.ringCap);
+            cache.ringCap = Math.max(1, f.ringCap());
             return;
         }
 
@@ -506,7 +504,7 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
         );
 
         cache.lastCount = list.size();
-        cache.ringCap = Math.max(1, f.ringCap);
+        cache.ringCap = Math.max(1, f.ringCap());
 
         ConcurrentHashMap<Ref<EntityStore>, Vector3d> oldCurrent = new ConcurrentHashMap<>(cache.currentOffsetByRef);
 
@@ -534,16 +532,16 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
 
         if (total <= 1) {
             double angle = yawBase + Math.PI;
-            double radius = Math.min(f.baseRadius, f.maxRadius);
-            return withJitter(selfRef, Math.cos(angle) * radius, Math.sin(angle) * radius, f.jitter);
+            double radius = Math.min(f.baseRadius(), f.maxRadius());
+            return withJitter(selfRef, Math.cos(angle) * radius, Math.sin(angle) * radius, f.jitter());
         }
 
         int safeCap = Math.max(1, ringCap);
         int ring = idx / safeCap;
         int slot = idx % safeCap;
 
-        double radius = f.baseRadius + ring * f.ringStep;
-        radius = Math.min(radius, f.maxRadius);
+        double radius = f.baseRadius() + ring * f.ringStep();
+        radius = Math.min(radius, f.maxRadius());
 
         double angle = yawBase + (2.0 * Math.PI) * ((double) slot / (double) safeCap);
         angle += ring * (Math.PI / safeCap);
@@ -551,7 +549,7 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
         double x = Math.cos(angle) * radius;
         double z = Math.sin(angle) * radius;
 
-        return withJitter(selfRef, x, z, f.jitter);
+        return withJitter(selfRef, x, z, f.jitter());
     }
 
     private Vector3d withJitter(Ref<EntityStore> ref, double x, double z, double jitter) {
@@ -576,7 +574,7 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
         double dist = Math.sqrt(dx * dx + dz * dz);
         if (dist < 1e-6) return;
 
-        double alpha = 1.0 - Math.exp(-f.offsetSmoothK * dt);
+        double alpha = 1.0 - Math.exp(-f.offsetSmoothK() * dt);
 
         double nx = current.x + dx * alpha;
         double nz = current.z + dz * alpha;
@@ -585,7 +583,7 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
         double stepZ = nz - current.z;
         double stepLen = Math.sqrt(stepX * stepX + stepZ * stepZ);
 
-        double maxStep = f.offsetMaxSpeed * dt;
+        double maxStep = f.offsetMaxSpeed() * dt;
         if (stepLen > maxStep && stepLen > 1e-9) {
             double s = maxStep / stepLen;
             stepX *= s;
@@ -686,77 +684,37 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
             Ref<EntityStore> ownerRef,
             UUID ownerUuid
     ) {
-        final int capSlots = SummonStats.getMaxSlots(store, ownerRef);
-
-        final ArrayList<Ref<EntityStore>> refs = new ArrayList<>();
-
-        final ComponentType<EntityStore, NPCEntity> npcType = NPCEntity.getComponentType();
-        if (npcType == null) return;
-
-        final Query<EntityStore> q = Query.and(
+        SummonOwnerSlotMaintenance.enforceGlobalSlotsAndRebuild(
+                store,
+                cb,
+                ownerRef,
+                ownerUuid,
                 summonTagType,
-                npcType,
-                UUIDComponent.getComponentType(),
-                NetworkId.getComponentType(),
-                TransformComponent.getComponentType()
+                targetSelector
         );
-        store.forEachChunk(q, (c, ccb) -> {
-            for (int i = 0; i < c.size(); i++) {
-                final SummonComponent t = c.getComponent(i, summonTagType);
-                if (t == null) continue;
-                if (!ownerUuid.equals(t.owner)) continue;
-                refs.add(c.getReferenceTo(i));
-            }
-        });
-
-        int usedSlots = 0;
-        for (Ref<EntityStore> r : refs) {
-            final SummonComponent t = store.getComponent(r, summonTagType);
-            if (t != null) usedSlots += Math.max(0, t.slotCost);
-        }
-
-        refs.sort(Comparator.comparingLong((Ref<EntityStore> r) -> {
-            final SummonComponent t = store.getComponent(r, summonTagType);
-            return (t != null) ? t.spawnSeq : Long.MIN_VALUE;
-        }));
-
-        while (usedSlots > capSlots && !refs.isEmpty()) {
-            final int last = refs.size() - 1;
-            final Ref<EntityStore> r = refs.remove(last);
-            final SummonComponent t = store.getComponent(r, summonTagType);
-            if (t != null) usedSlots -= Math.max(0, t.slotCost);
-            cb.removeEntity(r, RemoveReason.REMOVE);
-        }
-
-        SummonIndexing.rebuildOwnerIndices(store, cb, summonTagType, ownerUuid, refs);
-
-        final Ref<EntityStore> focus = SummonRuntimeServices.targets().pullAggroOrFocus(store, ownerUuid, summonTagType);
-        if (focus != null && (!focus.isValid() || !targetSelector.isAlive(focus, store))) {
-            SummonRuntimeServices.targets().clearRuntimeTarget(ownerUuid);
-        }
     }
 
     private static double clamp(double v, double lo, double hi) {
-        return Math.max(lo, Math.min(hi, v));
+        return Math.clamp(hi, lo, v);
     }
 
     private static long hashFormation(NpcRoleSummonDefinition.Formation f) {
         if (f == null) return 0L;
         long h = 1469598103934665603L;
-        h = mix(h, f.enabled ? 1L : 0L);
-        h = mix(h, Double.doubleToLongBits(f.baseRadius));
-        h = mix(h, Double.doubleToLongBits(f.ringStep));
-        h = mix(h, f.ringCap);
-        h = mix(h, Double.doubleToLongBits(f.jitter));
-        h = mix(h, Double.doubleToLongBits(f.maxRadius));
-        h = mix(h, Double.doubleToLongBits(f.minMoveDist));
-        h = mix(h, Double.doubleToLongBits(f.maxTurnSpeed));
-        h = mix(h, Double.doubleToLongBits(f.yawSmoothK));
-        h = mix(h, Double.doubleToLongBits(f.anchorDeadzone));
-        h = mix(h, Double.doubleToLongBits(f.anchorSmoothK));
-        h = mix(h, Double.doubleToLongBits(f.offsetSmoothK));
-        h = mix(h, Double.doubleToLongBits(f.offsetMaxSpeed));
-        h = mix(h, Float.floatToIntBits(f.rebuildIntervalSec));
+        h = mix(h, f.enabled() ? 1L : 0L);
+        h = mix(h, Double.doubleToLongBits(f.baseRadius()));
+        h = mix(h, Double.doubleToLongBits(f.ringStep()));
+        h = mix(h, f.ringCap());
+        h = mix(h, Double.doubleToLongBits(f.jitter()));
+        h = mix(h, Double.doubleToLongBits(f.maxRadius()));
+        h = mix(h, Double.doubleToLongBits(f.minMoveDist()));
+        h = mix(h, Double.doubleToLongBits(f.maxTurnSpeed()));
+        h = mix(h, Double.doubleToLongBits(f.yawSmoothK()));
+        h = mix(h, Double.doubleToLongBits(f.anchorDeadzone()));
+        h = mix(h, Double.doubleToLongBits(f.anchorSmoothK()));
+        h = mix(h, Double.doubleToLongBits(f.offsetSmoothK()));
+        h = mix(h, Double.doubleToLongBits(f.offsetMaxSpeed()));
+        h = mix(h, Float.floatToIntBits(f.rebuildIntervalSec()));
         return h;
     }
 

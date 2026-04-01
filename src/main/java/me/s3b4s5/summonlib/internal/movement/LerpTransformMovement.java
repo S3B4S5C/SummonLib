@@ -16,10 +16,6 @@ public final class LerpTransformMovement {
         ));
     }
 
-    public void faceOwner(TransformComponent t, Object ownerRotationObj, double ownerYawRad, Object controller) {
-        faceOwner(t, ownerRotationObj, ownerYawRad, controller, 0, 1);
-    }
-
     public void faceOwner(
             TransformComponent t,
             Object ownerRotationObj,
@@ -78,7 +74,7 @@ public final class LerpTransformMovement {
     }
 
     private static double clamp(double v, double a, double b) {
-        return (v < a) ? a : (v > b) ? b : v;
+        return (v < a) ? a : Math.min(v, b);
     }
 }
 

@@ -2,8 +2,8 @@ package me.s3b4s5.summonlib.internal.component;
 
 import com.hypixel.hytale.component.Component;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
+import org.checkerframework.checker.nullness.compatqual.NonNullDecl;
 
-import javax.annotation.Nullable;
 import java.util.UUID;
 
 /**
@@ -31,17 +31,6 @@ public final class SummonComponent implements Component<EntityStore> {
     public int getSlotCost() { return slotCost; }
     public long getSpawnSeq() { return spawnSeq; }
 
-    public int getGroupIndex() { return groupIndex; }
-    public int getGroupTotal() { return groupTotal; }
-    public int getGlobalIndex() { return globalIndex; }
-    public int getGlobalTotal() { return globalTotal; }
-    public int getVariantIndex() { return variantIndex; }
-
-    public void setGroupIndex(int v) { groupIndex = v; }
-    public void setGroupTotal(int v) { groupTotal = v; }
-    public void setGlobalIndex(int v) { globalIndex = v; }
-    public void setGlobalTotal(int v) { globalTotal = v; }
-    public void setVariantIndex(int v) { variantIndex = v; }
     public void setSpawnSeq(long v) { spawnSeq = v; }
 
     public SummonComponent() {
@@ -77,7 +66,7 @@ public final class SummonComponent implements Component<EntityStore> {
         this.variantIndex = o.variantIndex;
     }
 
-    @Nullable
+    @NonNullDecl
     @Override
     public Component<EntityStore> clone() {
         return new SummonComponent(this);

@@ -52,7 +52,7 @@ public final class SummonOwnerCleanup {
             LOGGER.atInfo().log("[SummonOwnerCleanup] removed=%d owner=%s world=%s",
                     removed[0],
                     String.valueOf(ownerUuid),
-                    (w != null ? w.getName() : "null"));
+                    w.getName());
         }
 
         return removed[0];

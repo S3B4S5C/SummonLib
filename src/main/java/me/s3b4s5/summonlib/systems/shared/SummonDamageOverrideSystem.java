@@ -17,7 +17,6 @@ import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import me.s3b4s5.summonlib.internal.definition.SummonDefinition;
 import me.s3b4s5.summonlib.internal.context.SummonReferenceResolver;
 import me.s3b4s5.summonlib.internal.runtime.service.SummonRuntimeServices;
-import me.s3b4s5.summonlib.stats.SummonStats;
 import me.s3b4s5.summonlib.internal.component.SummonComponent;
 
 import javax.annotation.Nonnull;
@@ -71,7 +70,7 @@ public final class SummonDamageOverrideSystem extends DamageEventSystem {
             return;
         }
 
-        if (attackerRef == null || !attackerRef.isValid()) return;
+        if (!attackerRef.isValid()) return;
 
         final SummonComponent summonTag = store.getComponent(attackerRef, summonTagType);
         if (summonTag == null) return;

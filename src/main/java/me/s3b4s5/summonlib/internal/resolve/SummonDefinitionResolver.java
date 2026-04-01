@@ -21,19 +21,11 @@ public final class SummonDefinitionResolver {
     }
 
     public static @Nullable SummonDefinition resolve(@Nullable SummonConfig config) {
-        if (config == null) {
-            return null;
-        }
-
-        if (config instanceof ModelSummonConfig model) {
-            return resolve(model);
-        }
-
-        if (config instanceof NpcSummonConfig npc) {
-            return resolve(npc);
-        }
-
-        return null;
+        return switch (config) {
+            case ModelSummonConfig model -> resolve(model);
+            case NpcSummonConfig npc -> resolve(npc);
+            case null, default -> null;
+        };
     }
 
     public static @Nullable SummonDefinition resolve(@Nullable ModelSummonConfig config) {

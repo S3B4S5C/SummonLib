@@ -8,20 +8,15 @@ import me.s3b4s5.summonlib.assets.config.model.follow.WingFollowConfig;
 
 /**
  * Wing follow ASSET codec fields (wing-specific only).
- *
- * IMPORTANT:
- * - Since this is already a "Wing follow" asset, keys DO NOT have "Wing" prefix.
- * - Shared follow tuning (BaseBack/BaseHeight/AttackHeight/MinPitchRad/MaxPitchRad)
- *   must live in ModelSummonConfig (not here).
  */
 public final class WingFollowConfigCodec {
 
     private WingFollowConfigCodec() {}
 
-    public static BuilderCodec.Builder<WingFollowConfig> appendWingFields(
+    public static void appendWingFields(
             BuilderCodec.Builder<WingFollowConfig> b
     ) {
-        return b
+        b
                 .appendInherited(new KeyedCodec<>("StepBack", Codec.DOUBLE),
                         (o, v) -> o.stepBack = (v == null ? o.stepBack : v),
                         (o) -> o.stepBack,
@@ -64,7 +59,6 @@ public final class WingFollowConfigCodec {
                         (o, p) -> o.pitchSpreadDeg = p.pitchSpreadDeg
                 ).add()
 
-                // Needed by controller.
                 .appendInherited(new KeyedCodec<>("SideMode", Codec.STRING),
                         (o, v) -> o.sideMode = (v == null ? o.sideMode : v),
                         (o) -> o.sideMode,

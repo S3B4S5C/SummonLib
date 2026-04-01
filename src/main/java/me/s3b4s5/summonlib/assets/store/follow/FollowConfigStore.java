@@ -5,6 +5,8 @@ import com.hypixel.hytale.assetstore.map.IndexedLookupTableAssetMap;
 import com.hypixel.hytale.server.core.asset.HytaleAssetStore;
 import me.s3b4s5.summonlib.assets.config.model.follow.FollowConfig;
 import me.s3b4s5.summonlib.assets.config.model.follow.OrbitFollowConfig;
+import me.s3b4s5.summonlib.assets.store.util.AssetStoreUpdateSupport;
+import me.s3b4s5.summonlib.assets.store.util.SummonDefinitionRebuilder;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -24,7 +26,7 @@ public final class FollowConfigStore extends HytaleAssetStore<
 
     @Nonnull
     public static FollowConfigStore create() {
-        var map = new IndexedLookupTableAssetMap<String, FollowConfig>(FollowConfig[]::new);
+        var map = new IndexedLookupTableAssetMap<>(FollowConfig[]::new);
         var b = HytaleAssetStore.builder(String.class, FollowConfig.class, map);
 
         b.setPath(PATH)
@@ -33,9 +35,8 @@ public final class FollowConfigStore extends HytaleAssetStore<
                 .setIdProvider(FollowConfig.class)
                 .setIsUnknown(FollowConfig::isUnknown);
 
-        // When something references a missing follow id, return an "unknown" placeholder.
         b.setReplaceOnRemove((String id) -> {
-            var cfg = new OrbitFollowConfig(); // default placeholder type
+            var cfg = new OrbitFollowConfig();
             cfg.id = id;
             cfg.unknown = true;
             return cfg;
@@ -52,12 +53,7 @@ public final class FollowConfigStore extends HytaleAssetStore<
     ) {
         super.handleRemoveOrUpdate(removedKeys, loadedOrUpdated, query);
 
-        java.util.HashSet<String> touched = new java.util.HashSet<>();
-        if (loadedOrUpdated != null) touched.addAll(loadedOrUpdated.keySet());
-        if (removedKeys != null) touched.addAll(removedKeys);
-
-        me.s3b4s5.summonlib.assets.store.util.SummonDefinitionRebuilder.rebuildModelSummonsUsingFollow(touched);
+        Set<String> touched = AssetStoreUpdateSupport.collectTouchedKeys(removedKeys, loadedOrUpdated);
+        SummonDefinitionRebuilder.rebuildModelSummonsUsingFollow(touched);
     }
 }
-
-

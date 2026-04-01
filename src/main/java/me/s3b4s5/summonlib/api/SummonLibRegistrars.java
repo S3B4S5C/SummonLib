@@ -1,13 +1,10 @@
 package me.s3b4s5.summonlib.api;
 
-import me.s3b4s5.summonlib.assets.config.SummonConfig;
 import me.s3b4s5.summonlib.assets.config.model.ModelSummonConfig;
-import me.s3b4s5.summonlib.assets.config.model.follow.FollowConfig;
 import me.s3b4s5.summonlib.assets.config.model.follow.OrbitFollowConfig;
 import me.s3b4s5.summonlib.assets.config.model.follow.WingFollowConfig;
 import me.s3b4s5.summonlib.assets.config.npc.NpcSummonConfig;
 import me.s3b4s5.summonlib.assets.config.npc.motion.FlyNpcMotionControllerConfig;
-import me.s3b4s5.summonlib.assets.config.npc.motion.NpcMotionControllerConfig;
 import me.s3b4s5.summonlib.assets.config.npc.motion.WalkNpcMotionControllerConfig;
 import me.s3b4s5.summonlib.interaction.SummonCastInteraction;
 import me.s3b4s5.summonlib.interaction.SummonClearSummonsInteraction;

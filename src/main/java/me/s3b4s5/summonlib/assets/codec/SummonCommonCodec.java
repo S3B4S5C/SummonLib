@@ -10,8 +10,8 @@ public final class SummonCommonCodec {
 
     private SummonCommonCodec() {}
 
-    public static <T extends BaseSummonConfig> BuilderCodec.Builder<T> appendCommon(BuilderCodec.Builder<T> b) {
-        return b
+    public static <T extends BaseSummonConfig> void appendCommon(BuilderCodec.Builder<T> b) {
+        b
                 .appendInherited(new KeyedCodec<>("SlotCost", Codec.INTEGER),
                         (o, v) -> o.slotCost = (v == null ? 1 : v),
                         (o) -> o.slotCost,
@@ -31,13 +31,13 @@ public final class SummonCommonCodec {
                 ).addValidator(Validators.greaterThanOrEqual(0.0)).add()
 
                 .appendInherited(new KeyedCodec<>("RequireOwnerLoS", Codec.BOOLEAN),
-                        (o, v) -> o.requireOwnerLoS = (v == null ? true : v),
+                        (o, v) -> o.requireOwnerLoS = (v == null || v),
                         (o) -> o.requireOwnerLoS,
                         (o, p) -> o.requireOwnerLoS = p.requireOwnerLoS
                 ).add()
 
                 .appendInherited(new KeyedCodec<>("RequireSummonLoS", Codec.BOOLEAN),
-                        (o, v) -> o.requireSummonLoS = (v == null ? true : v),
+                        (o, v) -> o.requireSummonLoS = (v == null || v),
                         (o) -> o.requireSummonLoS,
                         (o, p) -> o.requireSummonLoS = p.requireSummonLoS
                 ).add()

@@ -6,14 +6,13 @@ import me.s3b4s5.summonlib.assets.config.SummonConfig;
 
 import javax.annotation.Nonnull;
 
+/**
+ * Declarative asset for a model-based summon.
+ *
+ * <p>This config references a follow asset through {@link #followId}. Runtime
+ * follow behavior is resolved later by the internal resolver layer.</p>
+ */
 public final class ModelSummonConfig extends SummonConfig {
-    /**
-     * Declarative asset for a model-based summon.
-     *
-     * <p>This config references a follow asset through {@link #followId}. Runtime
-     * follow behavior is resolved later by the internal resolver layer.</p>
-     */
-
     @Nonnull
     public static final String ASSET_TYPE_ID = "Model";
 

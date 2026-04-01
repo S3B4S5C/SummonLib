@@ -23,47 +23,6 @@ public final class SummonTargetSelector {
     }
 
     public @Nullable Ref<EntityStore> select(
-            Ref<EntityStore> ownerRef,
-            Store<EntityStore> store,
-            World world,
-            Vector3d summonPos,
-            Vector3d ownerEye,
-            double radius,
-            @Nullable Ref<EntityStore> current,
-            @Nullable Ref<EntityStore> preferred,
-            boolean requireOwnerLoS,
-            boolean requireSummonLoS
-    ) {
-        if (radius <= 0.0) return null;
-
-        if (validation.isTargetStillValid(
-                ownerRef, store, world,
-                summonPos, ownerEye, radius,
-                current, requireOwnerLoS, requireSummonLoS,
-                false,
-                search
-        )) {
-            return current;
-        }
-
-        if (validation.isTargetStillValid(
-                ownerRef, store, world,
-                summonPos, ownerEye, radius,
-                preferred, requireOwnerLoS, requireSummonLoS,
-                true,
-                search
-        )) {
-            return preferred;
-        }
-
-        return search.findClosestAliveVisibleHostile(
-                ownerRef, store, world,
-                summonPos, ownerEye, radius,
-                requireOwnerLoS, requireSummonLoS
-        );
-    }
-
-    public @Nullable Ref<EntityStore> select(
             OwnerContextResolver.OwnerCtx ownerCtx,
             Store<EntityStore> store,
             Vector3d summonPos,
@@ -105,24 +64,6 @@ public final class SummonTargetSelector {
         );
     }
 
-    public boolean isTargetStillValid(
-            Ref<EntityStore> ownerRef,
-            Store<EntityStore> store,
-            World world,
-            Vector3d summonPos,
-            Vector3d ownerEye,
-            double radius,
-            @Nullable Ref<EntityStore> targetRef,
-            boolean requireOwnerLoS,
-            boolean requireSummonLoS,
-            boolean requireHostileOnly
-    ) {
-        return validation.isTargetStillValid(
-                ownerRef, store, world, summonPos, ownerEye, radius,
-                targetRef, requireOwnerLoS, requireSummonLoS, requireHostileOnly, search
-        );
-    }
-
     public boolean isAlive(Ref<EntityStore> ref, Store<EntityStore> store) {
         return validation.isAlive(ref, store);
     }
@@ -136,10 +77,6 @@ public final class SummonTargetSelector {
             boolean requireSummonLoS
     ) {
         return validation.passesLoS(world, summonPos, ownerEye, targetPos, requireOwnerLoS, requireSummonLoS);
-    }
-
-    public double heightOverGround(World world, Vector3d from, int maxDown) {
-        return validation.heightOverGround(world, from, maxDown);
     }
 }
 

@@ -25,7 +25,7 @@ public final class NpcTargetingSupport {
         try {
             float eye = model.getEyeHeight(targetRef, store);
             if (eye > 0.05f) {
-                offset = Math.max(0.35, Math.min(eye, 2.2));
+                offset = Math.clamp(eye, 0.35, 2.2);
             }
         } catch (Throwable ignored) {
         }

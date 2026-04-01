@@ -54,16 +54,16 @@ public class SummonAggroFromDamageSystem extends DamageEventSystem {
         if (damage.getAmount() <= 0f) return;
 
         Ref<EntityStore> victimRef = chunk.getReferenceTo(index);
-        if (victimRef == null || !victimRef.isValid()) return;
+        if (!victimRef.isValid()) return;
 
         Ref<EntityStore> attackerRef = null;
         Damage.Source src = damage.getSource();
         if (src instanceof Damage.EntitySource es) {
             Ref<EntityStore> r = es.getRef();
-            if (r != null && r.isValid()) attackerRef = r;
+            if (r.isValid()) attackerRef = r;
         }
 
-        Instant now = resolveNow(cb);
+        Instant now = resolveNow();
 
         UUID victimUuid = getUuid(chunk, index);
         boolean victimIsPlayer = cb.getComponent(victimRef, PlayerRef.getComponentType()) != null;
@@ -90,8 +90,7 @@ public class SummonAggroFromDamageSystem extends DamageEventSystem {
             return;
         }
 
-        if (attackerIsPlayer && attackerUuid != null && attackerRef != null && attackerRef.isValid()
-                && !Objects.equals(victimRef, attackerRef)) {
+        if (attackerIsPlayer && attackerUuid != null && attackerRef.isValid() && !Objects.equals(victimRef, attackerRef)) {
 
             boolean friendly = isFriendlySummon(cb, attackerUuid, victimRef);
 
@@ -106,7 +105,7 @@ public class SummonAggroFromDamageSystem extends DamageEventSystem {
         }
     }
 
-    private static Instant resolveNow(CommandBuffer<EntityStore> cb) {
+    private static Instant resolveNow() {
         return Instant.now();
     }
 

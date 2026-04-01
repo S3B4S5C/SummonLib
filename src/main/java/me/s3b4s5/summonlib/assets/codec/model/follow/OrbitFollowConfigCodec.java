@@ -10,10 +10,10 @@ public final class OrbitFollowConfigCodec {
 
     private OrbitFollowConfigCodec() {}
 
-    public static BuilderCodec.Builder<OrbitFollowConfig> appendOrbitFields(
+    public static void appendOrbitFields(
             BuilderCodec.Builder<OrbitFollowConfig> b
     ) {
-        return b
+        b
                 .appendInherited(new KeyedCodec<>("Radius", Codec.DOUBLE),
                         (o, v) -> o.radius = (v == null ? o.radius : v),
                         (o) -> o.radius,

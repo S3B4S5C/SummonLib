@@ -10,8 +10,6 @@ public final class WalkNpcMotionControllerConfig extends NpcMotionControllerConf
     @Nonnull
     public static final String ASSET_TYPE_ID = "Walk";
 
-    // Walk has no Y/vertical config for now.
-
     @Nonnull
     public static final BuilderCodec<WalkNpcMotionControllerConfig> ABSTRACT_CODEC;
 
@@ -19,7 +17,7 @@ public final class WalkNpcMotionControllerConfig extends NpcMotionControllerConf
         var b = BuilderCodec.builder(WalkNpcMotionControllerConfig.class, WalkNpcMotionControllerConfig::new);
         WalkNpcMotionControllerCodec.appendWalkFields(b);
 
-        ABSTRACT_CODEC = b.afterDecode((o, extra) -> {
+        ABSTRACT_CODEC = b.afterDecode((o, _) -> {
             if (o.id == null) o.id = "";
         }).build();
     }

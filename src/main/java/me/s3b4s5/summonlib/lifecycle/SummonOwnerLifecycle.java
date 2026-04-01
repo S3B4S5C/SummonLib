@@ -54,14 +54,12 @@ public final class SummonOwnerLifecycle {
     public void onPlayerLeaveWorld(DrainPlayerFromWorldEvent event) {
         if (event == null) return;
 
-        UUID ownerUuid = resolveOwnerUuid(event.getHolder() != null
-                ? event.getHolder().getComponent(PlayerRef.getComponentType())
-                : null);
+        UUID ownerUuid = resolveOwnerUuid(event.getHolder().getComponent(PlayerRef.getComponentType()));
         if (ownerUuid == null) return;
 
         World world = resolveEventWorld(
                 event.getWorld(),
-                event.getHolder() != null ? event.getHolder().getComponent(PlayerRef.getComponentType()) : null
+                event.getHolder().getComponent(PlayerRef.getComponentType())
         );
         scheduleCleanup(world, ownerUuid, CleanupReason.WORLD_EXIT, true);
     }
@@ -71,7 +69,6 @@ public final class SummonOwnerLifecycle {
 
         PlayerRef player = event.getPlayerRef();
         UUID ownerUuid = resolveOwnerUuid(player);
-        if (ownerUuid == null) return;
 
         World world = resolveWorld(player);
         scheduleCleanup(world, ownerUuid, CleanupReason.DISCONNECT, true);
@@ -80,9 +77,7 @@ public final class SummonOwnerLifecycle {
     public void onPlayerAddedToWorld(AddPlayerToWorldEvent event) {
         if (!cleanupGhostsOnWorldJoin || event == null) return;
 
-        PlayerRef player = event.getHolder() != null
-                ? event.getHolder().getComponent(PlayerRef.getComponentType())
-                : null;
+        PlayerRef player = event.getHolder().getComponent(PlayerRef.getComponentType());
         UUID ownerUuid = resolveOwnerUuid(player);
         if (ownerUuid == null) return;
 
@@ -103,7 +98,6 @@ public final class SummonOwnerLifecycle {
     public void cleanupAfterTeleport(
             Store<EntityStore> store,
             CommandBuffer<EntityStore> cb,
-            Ref<EntityStore> ownerRef,
             UUID ownerUuid
     ) {
         if (ownerUuid == null) return;

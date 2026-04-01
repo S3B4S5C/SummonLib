@@ -67,10 +67,6 @@ public class SummonCastInteraction extends Interaction {
 
     public SummonCastInteraction() {}
 
-    public SummonCastInteraction(@Nonnull String id) {
-        super(id);
-    }
-
     @Nonnull
     @Override
     public WaitForDataFrom getWaitForDataFrom() {
@@ -88,22 +84,18 @@ public class SummonCastInteraction extends Interaction {
         if (!firstRun) return;
 
         Ref<EntityStore> entityRef = context.getEntity();
-        if (entityRef == null || !entityRef.isValid()) {
-            if (DEBUG) LOGGER.atWarning().log("[SummonCast] invalid entityRef");
+        if (!entityRef.isValid()) {
+            if (DEBUG) LOGGER.atWarning().log("invalid entityRef");
             return;
         }
 
         CommandBuffer<EntityStore> cb = context.getCommandBuffer();
         if (cb == null) {
-            if (DEBUG) LOGGER.atWarning().log("[SummonCast] null CommandBuffer");
+            if (DEBUG) LOGGER.atWarning().log("null CommandBuffer");
             return;
         }
 
         Store<EntityStore> store = entityRef.getStore();
-        if (store == null) {
-            if (DEBUG) LOGGER.atWarning().log("[SummonCast] null Store (entityRef=%s)", entityRef);
-            return;
-        }
 
         try {
             var uuidType = com.hypixel.hytale.server.core.entity.UUIDComponent.getComponentType();
@@ -111,14 +103,14 @@ public class SummonCastInteraction extends Interaction {
             if (uuidComp == null) uuidComp = store.getComponent(entityRef, uuidType);
 
             if (uuidComp == null) {
-                LOGGER.atWarning().log("[SummonCast] UUIDComponent missing on caster entityRef=%s", entityRef);
+                LOGGER.atWarning().log("UUIDComponent missing on caster entityRef=%s", entityRef);
                 return;
             }
 
             UUID ownerUuid = uuidComp.getUuid();
 
             if (DEBUG) {
-                LOGGER.atInfo().log("[SummonCast] type=%s mode=%s summonId=%s amount=%d owner=%s",
+                LOGGER.atInfo().log("type=%s mode=%s summonId=%s amount=%d owner=%s",
                         type, mode, summonId, amount, ownerUuid);
             }
 
@@ -128,12 +120,12 @@ public class SummonCastInteraction extends Interaction {
                 case CLEAR -> SummonActions.Mode.CLEAR;
             };
 
-            if (DEBUG) LOGGER.atInfo().log("[SummonCast] calling SummonActions.cast(...)");
+            if (DEBUG) LOGGER.atInfo().log("calling SummonActions.cast(...)");
             SummonActions.cast(store, cb, ownerUuid, entityRef, summonId, amount, m);
-            if (DEBUG) LOGGER.atInfo().log("[SummonCast] cast() returned");
+            if (DEBUG) LOGGER.atInfo().log("cast() returned");
 
         } catch (Throwable t) {
-            LOGGER.atSevere().log("[SummonCast] EXCEPTION: %s", String.valueOf(t));
+            LOGGER.atSevere().log("EXCEPTION: %s", String.valueOf(t));
             t.printStackTrace();
         }
     }

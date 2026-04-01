@@ -10,9 +10,6 @@ public final class FlyNpcMotionControllerConfig extends NpcMotionControllerConfi
     @Nonnull
     public static final String ASSET_TYPE_ID = "Fly";
 
-    // -------------------------
-    // Y positioning / height policy
-    // -------------------------
     public double followYHigh = 4.5;
     public double followYLow = 1.5;
 
@@ -24,9 +21,6 @@ public final class FlyNpcMotionControllerConfig extends NpcMotionControllerConfi
     public float stuckTimeSec = 1.25f;
     public float lowModeHoldSec = 2.0f;
 
-    // -------------------------
-    // Vertical assist (optional)
-    // -------------------------
     public boolean verticalAssistEnabled = false;
     public double verticalDeadzone = 0.20;
 
@@ -38,9 +32,6 @@ public final class FlyNpcMotionControllerConfig extends NpcMotionControllerConfi
     public double vertCombatMaxUp = 10.0;
     public double vertCombatMaxDown = 14.0;
 
-    // ---------------------------------------
-    // Field schema / defaults for the editor
-    // ---------------------------------------
     @Nonnull
     public static final BuilderCodec<FlyNpcMotionControllerConfig> ABSTRACT_CODEC;
 
@@ -48,17 +39,15 @@ public final class FlyNpcMotionControllerConfig extends NpcMotionControllerConfi
         var b = BuilderCodec.builder(FlyNpcMotionControllerConfig.class, FlyNpcMotionControllerConfig::new);
         FlyNpcMotionControllerCodec.appendFlyFields(b);
 
-        ABSTRACT_CODEC = b.afterDecode((o, extra) -> {
+        ABSTRACT_CODEC = b.afterDecode((o, _) -> {
             if (o.id == null) o.id = "";
 
-            // Clamp basic sanity
             if (o.followYHigh < 0) o.followYHigh = 0;
             if (o.followYLow < 0) o.followYLow = 0;
 
             if (o.followYClampMin < 0) o.followYClampMin = 0;
             if (o.followYClampMax < 0) o.followYClampMax = 0;
 
-            // Ensure clamp ordering
             double mn = Math.min(o.followYClampMin, o.followYClampMax);
             double mx = Math.max(o.followYClampMin, o.followYClampMax);
             o.followYClampMin = mn;

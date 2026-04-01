@@ -21,10 +21,6 @@ public final class SummonRegistry {
         SummonRuntimeServices.definitions().unregister(id);
     }
 
-    public static void clear() {
-        SummonRuntimeServices.definitions().clear();
-    }
-
     @Nullable
     public static SummonDefinition get(@Nullable String id) {
         return SummonRuntimeServices.definitions().get(id);

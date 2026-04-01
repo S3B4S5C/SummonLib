@@ -49,19 +49,6 @@ public final class SummonStatService {
         return clampSlots(value.getMax());
     }
 
-    public float getSummonDamageMultiplier(Store<EntityStore> store, Ref<EntityStore> ownerRef) {
-        int statIndex = resolveSummonDamageIdx();
-        if (statIndex == Integer.MIN_VALUE) return 1.0f;
-
-        EntityStatMap map = store.getComponent(ownerRef, EntityStatMap.getComponentType());
-        if (map == null) return 1.0f;
-
-        map.update();
-        var value = map.get(statIndex);
-        if (value == null) return 1.0f;
-        return clampDamage(value.getMax());
-    }
-
     public float getSummonDamageMultiplier(Store<EntityStore> store, CommandBuffer<EntityStore> cb, Ref<EntityStore> ownerRef) {
         int statIndex = resolveSummonDamageIdx();
         if (statIndex == Integer.MIN_VALUE) return 1.0f;

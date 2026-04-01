@@ -123,7 +123,6 @@ public final class SummonTargetSearch {
     ) {
         try {
             WorldSupport ws = role.getWorldSupport();
-            if (ws == null) return null;
             ws.requireAttitudeCache();
             return ws.getAttitude(selfRef, targetRef, accessor);
         } catch (Throwable ignored) {

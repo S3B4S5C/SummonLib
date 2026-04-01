@@ -30,16 +30,13 @@ public final class SummonConfigStore extends HytaleAssetStore<
 
     @Nonnull
     public static SummonConfigStore create() {
-        var map = new IndexedLookupTableAssetMap<String, SummonConfig>(SummonConfig[]::new);
+        var map = new IndexedLookupTableAssetMap<>(SummonConfig[]::new);
         var b = HytaleAssetStore.builder(String.class, SummonConfig.class, map);
 
-        // NOTE:
-        // - IdProvider MUST be a concrete subtype when using a type-dispatch codec,
-        //   otherwise the editor tends to create assets with missing/invalid Type.
         b.setPath(PATH)
                 .setCodec(SummonConfig.CODEC)
                 .setKeyFunction(SummonConfig::getId)
-                .setIdProvider(ModelSummonConfig.class) // default editor-created subtype
+                .setIdProvider(ModelSummonConfig.class)
                 .setIsUnknown(SummonConfig::isUnknown);
 
         b.setReplaceOnRemove(SummonConfigStore::missingModel);
@@ -60,7 +57,7 @@ public final class SummonConfigStore extends HytaleAssetStore<
         if (removedKeys != null) touched.addAll(removedKeys);
         SummonDefinitionRebuilder.rebuildSummons(touched);
 
-        LOGGER.atInfo().log("[SummonConfigStore] loaded=%d removed=%d",
+        LOGGER.atInfo().log("loaded=%d removed=%d",
                 loadedOrUpdated == null ? 0 : loadedOrUpdated.size(),
                 removedKeys == null ? 0 : removedKeys.size());
     }
@@ -70,24 +67,20 @@ public final class SummonConfigStore extends HytaleAssetStore<
         cfg.id = (id == null ? "" : id);
         cfg.unknown = true;
 
-        // Common defaults
         cfg.slotCost = 1;
         cfg.damage = 0f;
         cfg.detectRadius = 0.0;
         cfg.requireOwnerLoS = true;
         cfg.requireSummonLoS = true;
 
-        // Follow default (single id now)
         cfg.followId = "";
 
-        // Shared follow tuning defaults
         cfg.baseBack = 0.4;
         cfg.baseHeight = 0.8;
         cfg.attackHeight = 0.48;
         cfg.minPitchRad = -0.6;
         cfg.maxPitchRad = 0.55;
 
-        // Model defaults
         cfg.modelAssets = new String[0];
         cfg.modelScale = 1.0f;
 

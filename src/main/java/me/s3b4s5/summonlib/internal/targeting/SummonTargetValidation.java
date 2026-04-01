@@ -4,7 +4,6 @@ import com.hypixel.hytale.component.ComponentType;
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.math.vector.Vector3d;
-import com.hypixel.hytale.math.vector.Vector3i;
 import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;
 import com.hypixel.hytale.server.core.modules.entity.tracker.NetworkId;
 import com.hypixel.hytale.server.core.modules.entitystats.EntityStatMap;
@@ -97,19 +96,6 @@ public final class SummonTargetValidation {
         return ownerOk && summonOk;
     }
 
-    public double heightOverGround(World world, Vector3d from, int maxDown) {
-        Vector3i hit = TargetUtil.getTargetBlock(
-                world,
-                (blockId, fluidId) -> blockId != 0,
-                from.x, from.y, from.z,
-                0.0, -1.0, 0.0,
-                maxDown
-        );
-        if (hit == null) return Double.POSITIVE_INFINITY;
-        double topY = hit.y + 1.0;
-        return from.y - topY;
-    }
-
     private static boolean hasLineOfSight(World world, Vector3d from, Vector3d to) {
         double dx = to.x - from.x;
         double dy = to.y - from.y;
@@ -120,7 +106,7 @@ public final class SummonTargetValidation {
         double inv = 1.0 / dist;
         return TargetUtil.getTargetBlock(
                 world,
-                (blockId, fluidId) -> blockId != 0,
+                (blockId, _) -> blockId != 0,
                 from.x, from.y, from.z,
                 dx * inv, dy * inv, dz * inv,
                 Math.max(0.0, dist - 0.10)

@@ -25,12 +25,8 @@ public final class NpcRoleSummonSpawnFactory implements SummonSpawnFactory {
     private static final HytaleLogger LOGGER = HytaleLogger.forEnclosingClass();
 
     private final String npcRoleId;
-    private final float initialModelScaleOverride; // 0 = no tocar, usa lo del role
+    private final float initialModelScaleOverride;
     private final boolean debug;
-
-    public NpcRoleSummonSpawnFactory(@Nonnull String npcRoleId) {
-        this(npcRoleId, 0f, false);
-    }
 
     public NpcRoleSummonSpawnFactory(@Nonnull String npcRoleId, float initialModelScaleOverride, boolean debug) {
         this.npcRoleId = npcRoleId;
@@ -66,10 +62,10 @@ public final class NpcRoleSummonSpawnFactory implements SummonSpawnFactory {
         NPCEntity npcComponent = new NPCEntity();
 
         try {
-            WorldTimeResource time = (WorldTimeResource) store.getResource(WorldTimeResource.getResourceType());
-            if (time != null) npcComponent.setSpawnInstant(time.getGameTime());
+            WorldTimeResource time = store.getResource(WorldTimeResource.getResourceType());
+            npcComponent.setSpawnInstant(time.getGameTime());
         } catch (Throwable t) {
-            if (debug) LOGGER.atWarning().log("[NpcRoleSummonSpawnFactory] WorldTimeResource unavailable: %s", t.toString());
+            if (debug) LOGGER.atWarning().log("WorldTimeResource unavailable: %s", t.toString());
         }
 
         npcComponent.saveLeashInformation(spawnPos, rotation);
@@ -82,6 +78,8 @@ public final class NpcRoleSummonSpawnFactory implements SummonSpawnFactory {
         }
 
         Holder<EntityStore> holder = EntityStore.REGISTRY.newHolder();
+
+        if (NPCEntity.getComponentType() == null) return null;
 
         holder.addComponent(NPCEntity.getComponentType(), npcComponent);
         holder.addComponent(TransformComponent.getComponentType(), new TransformComponent(spawnPos, rotation));

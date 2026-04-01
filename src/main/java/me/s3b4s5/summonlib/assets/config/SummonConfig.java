@@ -1,6 +1,5 @@
 package me.s3b4s5.summonlib.assets.config;
 
-import com.hypixel.hytale.assetstore.AssetExtraInfo;
 import com.hypixel.hytale.assetstore.AssetRegistry;
 import com.hypixel.hytale.assetstore.AssetStore;
 import com.hypixel.hytale.assetstore.codec.AssetCodecMapCodec;
@@ -24,16 +23,6 @@ public abstract class SummonConfig extends BaseSummonConfig
         implements JsonAssetWithMap<String, IndexedLookupTableAssetMap<String, SummonConfig>> {
 
     @Nonnull
-    public static final String ASSET_TYPE_ID = "Summon";
-
-    /**
-     * Type-dispatch codec driven by JSON {@code Type}.
-     *
-     * <p>Subtype codecs must be registered before related assets are loaded.
-     * External mods can do this through
-     * {@code me.s3b4s5.summonlib.api.SummonLibRegistration}.</p>
-     */
-    @Nonnull
     public static final AssetCodecMapCodec<String, SummonConfig> CODEC =
             new AssetCodecMapCodec<>(
                     Codec.STRING,
@@ -55,11 +44,6 @@ public abstract class SummonConfig extends BaseSummonConfig
     public static IndexedLookupTableAssetMap<String, SummonConfig> getAssetMap() {
         return getAssetStore().getAssetMap();
     }
-
-    // asset identity lives in BaseSummonConfig:
-    // public String id = "";
-    // public AssetExtraInfo.Data data;
-    // public boolean unknown;
 
     @Nonnull
     @Override

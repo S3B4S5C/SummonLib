@@ -10,7 +10,6 @@ public final class WingFollowConfig extends FollowConfig {
     @Nonnull
     public static final String ASSET_TYPE_ID = "Wing";
 
-    // wing-specific fields (NO "Wing" prefix in JSON keys)
     public double stepBack = 0.55;
     public double sideSpread = 1.8;
     public double heightSpread = 0.7;
@@ -20,12 +19,9 @@ public final class WingFollowConfig extends FollowConfig {
     public double rollSpreadDeg = 65.0;
     public double pitchSpreadDeg = 0.0;
 
-    // extra required fields for controller behavior
     public String sideMode = "LEFT_ONLY"; // LEFT_ONLY / RIGHT_ONLY / SYMMETRIC
     public double orbitRadius = 0.9;
-    // ---------------------------------------
-    // Field schema / defaults for the editor
-    // ---------------------------------------
+
     @Nonnull
     public static final BuilderCodec<WingFollowConfig> ABSTRACT_CODEC;
 

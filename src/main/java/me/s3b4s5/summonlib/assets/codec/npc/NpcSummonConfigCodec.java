@@ -117,7 +117,7 @@ public final class NpcSummonConfigCodec {
                 (o, p) -> o.formationRebuildIntervalSec = p.formationRebuildIntervalSec
         ).addValidator(Validators.greaterThanOrEqual(0.0f)).add();
 
-        b.afterDecode((o, extra) -> {
+        b.afterDecode((o, _) -> {
             if (o.id == null) o.id = "";
             if (o.npcRoleId == null) o.npcRoleId = "";
             if (o.npcMotionControllerId == null) o.npcMotionControllerId = "";

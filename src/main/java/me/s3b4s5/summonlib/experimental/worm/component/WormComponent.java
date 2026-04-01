@@ -2,8 +2,8 @@ package me.s3b4s5.summonlib.experimental.worm.component;
 
 import com.hypixel.hytale.component.Component;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
+import org.checkerframework.checker.nullness.compatqual.NonNullDecl;
 
-import javax.annotation.Nullable;
 import java.util.UUID;
 
 /**
@@ -25,13 +25,6 @@ public final class WormComponent implements Component<EntityStore> {
         snapDistanceMul = 3.0;
     }
 
-    public WormComponent(UUID chainId, int segmentIndex, double spacing) {
-        this();
-        this.chainId = chainId;
-        this.segmentIndex = segmentIndex;
-        this.spacing = spacing;
-    }
-
     public WormComponent(WormComponent o) {
         this.chainId = o.chainId;
         this.segmentIndex = o.segmentIndex;
@@ -40,7 +33,7 @@ public final class WormComponent implements Component<EntityStore> {
         this.snapDistanceMul = o.snapDistanceMul;
     }
 
-    @Nullable
+    @NonNullDecl
     @Override
     public Component<EntityStore> clone() {
         return new WormComponent(this);

@@ -28,10 +28,10 @@ public final class SummonLib extends JavaPlugin {
         try {
             SummonLibAssetExportBootstrap.exportEmbeddedAssets(this);
         } catch (Throwable t) {
-            LOGGER.atWarning().withCause(t).log("[SummonLib] Failed exporting embedded asset pack");
+            LOGGER.atWarning().withCause(t).log("Failed exporting embedded asset pack");
         }
 
-        LOGGER.atInfo().log("[SummonLib] Loaded %s v%s", getName(), getManifest().getVersion());
+        LOGGER.atInfo().log("Loaded %s v%s", getName(), getManifest().getVersion());
     }
 
     public static ComponentType<EntityStore, SummonComponent> summonComponentType() {

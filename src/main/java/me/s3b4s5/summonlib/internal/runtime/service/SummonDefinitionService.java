@@ -22,18 +22,13 @@ public final class SummonDefinitionService {
     public void register(@Nullable SummonDefinition definition) {
         if (definition == null || definition.id == null || definition.id.isEmpty()) return;
         cache.put(definition.id, definition);
-        if (DEBUG) LOG.atInfo().log("[SummonDefinitionService] register id=%s defClass=%s", definition.id, revealsClass(definition));
+        if (DEBUG) LOG.atInfo().log("register id=%s defClass=%s", definition.id, revealsClass(definition));
     }
 
     public void unregister(@Nullable String id) {
         if (id == null || id.isEmpty()) return;
         cache.remove(id);
-        if (DEBUG) LOG.atInfo().log("[SummonDefinitionService] unregister id=%s", id);
-    }
-
-    public void clear() {
-        cache.clear();
-        if (DEBUG) LOG.atInfo().log("[SummonDefinitionService] clear()");
+        if (DEBUG) LOG.atInfo().log("unregister id=%s", id);
     }
 
     @Nullable
@@ -48,12 +43,12 @@ public final class SummonDefinitionService {
 
         SummonDefinition built = SummonDefinitionResolver.resolve(cfg);
         if (built == null) {
-            if (DEBUG) LOG.atWarning().log("[SummonDefinitionService] unsupported cfgClass=%s", revealsClass(cfg));
+            if (DEBUG) LOG.atWarning().log("unsupported cfgClass=%s", revealsClass(cfg));
             return null;
         }
 
         if (!id.equals(built.id) && DEBUG) {
-            LOG.atWarning().log("[SummonDefinitionService] id mismatch requested=%s built.id=%s", id, built.id);
+            LOG.atWarning().log("id mismatch requested=%s built.id=%s", id, built.id);
         }
 
         SummonDefinition prev = cache.putIfAbsent(id, built);
@@ -63,15 +58,14 @@ public final class SummonDefinitionService {
     @Nullable
     private SummonConfig getSummonConfig(String id) {
         try {
-            @SuppressWarnings("unchecked")
             IndexedLookupTableAssetMap<String, SummonConfig> map =
-                    (IndexedLookupTableAssetMap<String, SummonConfig>) SummonConfig.getAssetStore().getAssetMap();
+                    SummonConfig.getAssetStore().getAssetMap();
 
             int idx = map.getIndex(id);
             if (idx == Integer.MIN_VALUE) return null;
             return map.getAsset(idx);
         } catch (Throwable t) {
-            if (DEBUG) LOG.atWarning().log("[SummonDefinitionService] getSummonConfig id=%s FAILED: %s", id, String.valueOf(t));
+            if (DEBUG) LOG.atWarning().log("getSummonConfig id=%s FAILED: %s", id, String.valueOf(t));
             return null;
         }
     }

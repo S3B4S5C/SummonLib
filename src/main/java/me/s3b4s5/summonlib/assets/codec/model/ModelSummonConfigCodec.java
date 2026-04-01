@@ -108,7 +108,7 @@ public final class ModelSummonConfigCodec {
                 (o, p) -> o.keepAttackWhileHasTarget = p.keepAttackWhileHasTarget
         ).add();
 
-        b.afterDecode((o, extra) -> {
+        b.afterDecode((o, _) -> {
             if (o.id == null) o.id = "";
             if (o.followId == null) o.followId = "";
 

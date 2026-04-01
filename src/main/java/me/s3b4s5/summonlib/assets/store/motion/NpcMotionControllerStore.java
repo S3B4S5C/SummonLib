@@ -5,6 +5,8 @@ import com.hypixel.hytale.assetstore.map.IndexedLookupTableAssetMap;
 import com.hypixel.hytale.server.core.asset.HytaleAssetStore;
 import me.s3b4s5.summonlib.assets.config.npc.motion.NpcMotionControllerConfig;
 import me.s3b4s5.summonlib.assets.config.npc.motion.WalkNpcMotionControllerConfig;
+import me.s3b4s5.summonlib.assets.store.util.AssetStoreUpdateSupport;
+import me.s3b4s5.summonlib.assets.store.util.SummonDefinitionRebuilder;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -24,17 +26,15 @@ public final class NpcMotionControllerStore extends HytaleAssetStore<
 
     @Nonnull
     public static NpcMotionControllerStore create() {
-        var map = new IndexedLookupTableAssetMap<String, NpcMotionControllerConfig>(NpcMotionControllerConfig[]::new);
+        var map = new IndexedLookupTableAssetMap<>(NpcMotionControllerConfig[]::new);
         var b = HytaleAssetStore.builder(String.class, NpcMotionControllerConfig.class, map);
 
         b.setPath(PATH)
                 .setCodec(NpcMotionControllerConfig.CODEC)
                 .setKeyFunction(NpcMotionControllerConfig::getId)
-                // default type for editor creation (concrete subtype)
                 .setIdProvider(WalkNpcMotionControllerConfig.class)
                 .setIsUnknown(NpcMotionControllerConfig::isUnknown);
 
-        // If something references a missing id, return unknown placeholder (Walk default).
         b.setReplaceOnRemove((String id) -> {
             var cfg = new WalkNpcMotionControllerConfig();
             cfg.id = (id == null ? "" : id);
@@ -53,12 +53,7 @@ public final class NpcMotionControllerStore extends HytaleAssetStore<
     ) {
         super.handleRemoveOrUpdate(removedKeys, loadedOrUpdated, query);
 
-        java.util.HashSet<String> touched = new java.util.HashSet<>();
-        if (loadedOrUpdated != null) touched.addAll(loadedOrUpdated.keySet());
-        if (removedKeys != null) touched.addAll(removedKeys);
-
-        me.s3b4s5.summonlib.assets.store.util.SummonDefinitionRebuilder.rebuildNpcSummonsUsingMotionController(touched);
+        Set<String> touched = AssetStoreUpdateSupport.collectTouchedKeys(removedKeys, loadedOrUpdated);
+        SummonDefinitionRebuilder.rebuildNpcSummonsUsingMotionController(touched);
     }
 }
-
-

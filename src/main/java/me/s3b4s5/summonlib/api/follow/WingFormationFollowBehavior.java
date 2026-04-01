@@ -7,11 +7,14 @@ import com.hypixel.hytale.math.vector.Vector3d;
  */
 public final class WingFormationFollowBehavior implements ModelFollowBehavior, OwnerPitchClamp, HomeRotationOffsets {
 
-    public enum SideMode { LEFT_ONLY, RIGHT_ONLY, SYMMETRIC }
+    public enum SideMode {
+        LEFT_ONLY,
+        RIGHT_ONLY,
+        SYMMETRIC
+    }
 
     private final double baseBack;
     private final double stepBack;
-
     private final double sideSpread;
     private final double baseHeight;
     private final double heightSpread;
@@ -42,46 +45,6 @@ public final class WingFormationFollowBehavior implements ModelFollowBehavior, O
             double pitchSpreadDeg,
             SideMode sideMode,
             double orbitRadius,
-            double attackHeight
-    ) {
-        this(baseBack, stepBack, sideSpread, baseHeight, heightSpread, heightCurvePow,
-                yawSpreadDeg, rollSpreadDeg, pitchSpreadDeg, sideMode,
-                orbitRadius, attackHeight, -0.6, 0.55, 0);
-    }
-
-    public WingFormationFollowBehavior(
-            double baseBack,
-            double stepBack,
-            double sideSpread,
-            double baseHeight,
-            double heightSpread,
-            double heightCurvePow,
-            double yawSpreadDeg,
-            double rollSpreadDeg,
-            double pitchSpreadDeg,
-            SideMode sideMode,
-            double orbitRadius,
-            double attackHeight,
-            double minPitchRad,
-            double maxPitchRad
-    ) {
-        this(baseBack, stepBack, sideSpread, baseHeight, heightSpread, heightCurvePow,
-                yawSpreadDeg, rollSpreadDeg, pitchSpreadDeg, sideMode,
-                orbitRadius, attackHeight, minPitchRad, maxPitchRad, 0);
-    }
-
-    public WingFormationFollowBehavior(
-            double baseBack,
-            double stepBack,
-            double sideSpread,
-            double baseHeight,
-            double heightSpread,
-            double heightCurvePow,
-            double yawSpreadDeg,
-            double rollSpreadDeg,
-            double pitchSpreadDeg,
-            SideMode sideMode,
-            double orbitRadius,
             double attackHeight,
             double minPitchRad,
             double maxPitchRad,
@@ -94,10 +57,10 @@ public final class WingFormationFollowBehavior implements ModelFollowBehavior, O
         this.heightSpread = heightSpread;
         this.heightCurvePow = Math.max(0.01, heightCurvePow);
 
-        this.yawSpreadRad   = Math.toRadians(yawSpreadDeg);
-        this.rollSpreadRad  = Math.toRadians(rollSpreadDeg);
+        this.yawSpreadRad = Math.toRadians(yawSpreadDeg);
+        this.rollSpreadRad = Math.toRadians(rollSpreadDeg);
         this.pitchSpreadRad = Math.toRadians(pitchSpreadDeg);
-        this.sideMode = (sideMode == null) ? SideMode.LEFT_ONLY : sideMode;
+        this.sideMode = sideMode != null ? sideMode : SideMode.LEFT_ONLY;
 
         this.orbitRadius = orbitRadius;
         this.attackHeight = attackHeight;
@@ -110,113 +73,70 @@ public final class WingFormationFollowBehavior implements ModelFollowBehavior, O
 
     @Override
     public double clampOwnerPitch(double pitchRad) {
-        if (pitchRad < minPitchRad) return minPitchRad;
-        if (pitchRad > maxPitchRad) return maxPitchRad;
-        return pitchRad;
+        return FollowBehaviorSupport.clampPitch(pitchRad, minPitchRad, maxPitchRad);
     }
 
     @Override
     public Vector3d computeHome(Vector3d ownerPos, double yawRad, int groupIndex, int groupTotal) {
-        int realCount = Math.max(1, groupTotal);
-        int effectiveCount = effectiveCount(realCount);
+        int effectiveCount = effectiveCount(groupTotal);
+        int index = FollowBehaviorSupport.clampIndex(groupIndex, effectiveCount);
+        double spreadParam = signedParam(index, effectiveCount);
 
-        int gi = Math.max(0, groupIndex);
-        int i = clampI(gi, effectiveCount); // <-- CLAMP contra effectiveCount, NO realCount
+        FollowBehaviorSupport.YawBasis basis = FollowBehaviorSupport.yawBasis(yawRad);
 
-        // basis
-        double fx = -Math.sin(yawRad);
-        double fz = -Math.cos(yawRad);
-        double rx =  Math.cos(yawRad);
-        double rz = -Math.sin(yawRad);
+        double back = baseBack + stepBack * index;
+        double side = spreadParam * sideSpread;
 
-        double t01 = (effectiveCount <= 1) ? 0.0 : (i / (double)(effectiveCount - 1));
-        double s = signedParam(t01);
-
-        double back = baseBack + stepBack * i;
-
-        double side = s * sideSpread;
-
-        double curve = 1.0 - Math.abs(s);
+        double curve = 1.0 - Math.abs(spreadParam);
         curve = Math.pow(Math.max(0.0, curve), heightCurvePow);
-        double y = ownerPos.y + baseHeight + heightSpread * curve;
 
-        double x = ownerPos.x + (-fx) * back + rx * side;
-        double z = ownerPos.z + (-fz) * back + rz * side;
+        double x = ownerPos.x + (-basis.fx()) * back + basis.rx() * side;
+        double y = ownerPos.y + baseHeight + heightSpread * curve;
+        double z = ownerPos.z + (-basis.fz()) * back + basis.rz() * side;
 
         return new Vector3d(x, y, z);
     }
 
-
     @Override
     public Vector3d computeAttackAnchor(Vector3d targetPos, int globalIndex, int globalTotal) {
-        int total = Math.max(1, globalTotal);
-        int i = clampI(globalIndex, total);
-
-        double ang = (total <= 1) ? 0.0 : (Math.PI * 2.0) * (i / (double) total);
-        double x = targetPos.x + Math.cos(ang) * orbitRadius;
-        double z = targetPos.z + Math.sin(ang) * orbitRadius;
-        double y = targetPos.y + attackHeight;
-        return new Vector3d(x, y, z);
+        return FollowBehaviorSupport.computeCircularAttackAnchor(
+                targetPos,
+                globalIndex,
+                globalTotal,
+                orbitRadius,
+                attackHeight
+        );
     }
 
     @Override
     public double homeYawOffsetRad(int groupIndex, int groupTotal) {
-        int realCount = Math.max(1, groupTotal);
-        int effectiveCount = effectiveCount(realCount);
-
-        int gi = Math.max(0, groupIndex);
-        int i = clampI(gi, effectiveCount);
-
-        double t01 = (effectiveCount <= 1) ? 0.0 : (i / (double)(effectiveCount - 1));
-        double s = signedParam(t01);
-        return s * yawSpreadRad;
+        return signedParam(groupIndex, effectiveCount(groupTotal)) * yawSpreadRad;
     }
 
     @Override
     public double homeRollOffsetRad(int groupIndex, int groupTotal) {
-        int realCount = Math.max(1, groupTotal);
-        int effectiveCount = effectiveCount(realCount);
-
-        int gi = Math.max(0, groupIndex);
-        int i = clampI(gi, effectiveCount);
-
-        double t01 = (effectiveCount <= 1) ? 0.0 : (i / (double)(effectiveCount - 1));
-        double s = signedParam(t01);
-        return s * rollSpreadRad;
+        return signedParam(groupIndex, effectiveCount(groupTotal)) * rollSpreadRad;
     }
-
 
     @Override
     public double homePitchOffsetRad(int groupIndex, int groupTotal) {
-        int realCount = Math.max(1, groupTotal);
-        int effectiveCount = effectiveCount(realCount);
-
-        int gi = Math.max(0, groupIndex);
-        int i = clampI(gi, effectiveCount);
-
-        double t01 = (effectiveCount <= 1) ? 0.0 : (i / (double)(effectiveCount - 1));
-        double s = signedParam(t01);
-        return s * pitchSpreadRad;
+        return signedParam(groupIndex, effectiveCount(groupTotal)) * pitchSpreadRad;
     }
 
     private int effectiveCount(int realCount) {
-        if (referenceTotal > 1) return Math.max(realCount, referenceTotal);
-        return realCount;
+        int safeRealCount = Math.max(1, realCount);
+        return referenceTotal > 1
+                ? Math.max(safeRealCount, referenceTotal)
+                : safeRealCount;
     }
 
-    private int clampI(int i, int count) {
-        if (i < 0) return 0;
-        if (i >= count) return count - 1;
-        return i;
-    }
+    private double signedParam(int index, int total) {
+        double t01 = FollowBehaviorSupport.normalizedIndex01(index, total, 0.0);
 
-    private double signedParam(double t01) {
         return switch (sideMode) {
-            case SYMMETRIC -> (t01 - 0.5) * 2.0; // -1..1
-            case RIGHT_ONLY -> t01;              // 0..1
-            case LEFT_ONLY -> -t01;              // 0..-1
+            case SYMMETRIC -> (t01 - 0.5) * 2.0;
+            case RIGHT_ONLY -> t01;
+            case LEFT_ONLY -> -t01;
         };
     }
 }
-
-

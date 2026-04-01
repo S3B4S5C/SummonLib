@@ -10,14 +10,10 @@ public final class OrbitFollowConfig extends FollowConfig {
     @Nonnull
     public static final String ASSET_TYPE_ID = "Orbit";
 
-    // orbit-specific fields
     public double radius = 1.4;
     public double spreadDeg = 120.0;
     public double orbitRadius = 0.9;
 
-    // ---------------------------------------
-    // Field schema / defaults for the editor
-    // ---------------------------------------
     @Nonnull
     public static final BuilderCodec<OrbitFollowConfig> ABSTRACT_CODEC;
 
@@ -25,7 +21,7 @@ public final class OrbitFollowConfig extends FollowConfig {
         var b = BuilderCodec.builder(OrbitFollowConfig.class, OrbitFollowConfig::new);
         OrbitFollowConfigCodec.appendOrbitFields(b);
 
-        ABSTRACT_CODEC = b.afterDecode((o, extra) -> {
+        ABSTRACT_CODEC = b.afterDecode((o, _) -> {
             if (o.id == null) o.id = "";
             if (o.radius < 0) o.radius = 0;
             if (o.orbitRadius < 0) o.orbitRadius = 0;

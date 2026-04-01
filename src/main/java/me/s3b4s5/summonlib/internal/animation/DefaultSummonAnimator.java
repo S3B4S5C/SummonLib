@@ -33,10 +33,6 @@ public final class DefaultSummonAnimator implements SummonAnimator {
             lastBaseKeyBySummon.put(summonUuid, key);
         }
     }
-
-    public void clear(UUID summonUuid) {
-        lastBaseKeyBySummon.remove(summonUuid);
-    }
 }
 
 
