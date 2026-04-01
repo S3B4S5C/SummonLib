@@ -8,7 +8,7 @@ import com.hypixel.hytale.codec.codecs.array.ArrayCodec;
 import com.hypixel.hytale.codec.validation.Validators;
 import me.s3b4s5.summonlib.assets.codec.SummonCommonCodec;
 import me.s3b4s5.summonlib.assets.config.model.ModelSummonConfig;
-import me.s3b4s5.summonlib.assets.config.model.follow.Follow;
+import me.s3b4s5.summonlib.assets.config.model.follow.FollowConfig;
 
 public final class ModelSummonConfigCodec {
 
@@ -17,7 +17,7 @@ public final class ModelSummonConfigCodec {
     private ModelSummonConfigCodec() {}
 
     public static final Codec<String> FOLLOW_REF =
-            new ContainedAssetCodec<>(Follow.class, Follow.CODEC);
+            new ContainedAssetCodec<>(FollowConfig.class, FollowConfig.CODEC);
 
     public static BuilderCodec<ModelSummonConfig> create() {
         var b = BuilderCodec.builder(ModelSummonConfig.class, ModelSummonConfig::new);
@@ -135,3 +135,5 @@ public final class ModelSummonConfigCodec {
         return b.build();
     }
 }
+
+

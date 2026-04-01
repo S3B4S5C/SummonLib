@@ -3,7 +3,7 @@ package me.s3b4s5.summonlib.assets.store.follow;
 import com.hypixel.hytale.assetstore.AssetUpdateQuery;
 import com.hypixel.hytale.assetstore.map.IndexedLookupTableAssetMap;
 import com.hypixel.hytale.server.core.asset.HytaleAssetStore;
-import me.s3b4s5.summonlib.assets.config.model.follow.Follow;
+import me.s3b4s5.summonlib.assets.config.model.follow.FollowConfig;
 import me.s3b4s5.summonlib.assets.config.model.follow.OrbitFollowConfig;
 
 import javax.annotation.Nonnull;
@@ -13,25 +13,25 @@ import java.util.Set;
 
 public final class FollowConfigStore extends HytaleAssetStore<
         String,
-        Follow,
-        IndexedLookupTableAssetMap<String, Follow>> {
+        FollowConfig,
+        IndexedLookupTableAssetMap<String, FollowConfig>> {
 
     private static final String PATH = "Entity/SummonLib/Follow";
 
-    private FollowConfigStore(@Nonnull Builder<String, Follow, IndexedLookupTableAssetMap<String, Follow>> builder) {
+    private FollowConfigStore(@Nonnull Builder<String, FollowConfig, IndexedLookupTableAssetMap<String, FollowConfig>> builder) {
         super(builder);
     }
 
     @Nonnull
     public static FollowConfigStore create() {
-        var map = new IndexedLookupTableAssetMap<String, Follow>(Follow[]::new);
-        var b = HytaleAssetStore.builder(String.class, Follow.class, map);
+        var map = new IndexedLookupTableAssetMap<String, FollowConfig>(FollowConfig[]::new);
+        var b = HytaleAssetStore.builder(String.class, FollowConfig.class, map);
 
         b.setPath(PATH)
-                .setCodec(Follow.CODEC)
-                .setKeyFunction(Follow::getId)
-                .setIdProvider(Follow.class)
-                .setIsUnknown(Follow::isUnknown);
+                .setCodec(FollowConfig.CODEC)
+                .setKeyFunction(FollowConfig::getId)
+                .setIdProvider(FollowConfig.class)
+                .setIsUnknown(FollowConfig::isUnknown);
 
         // When something references a missing follow id, return an "unknown" placeholder.
         b.setReplaceOnRemove((String id) -> {
@@ -47,7 +47,7 @@ public final class FollowConfigStore extends HytaleAssetStore<
     @Override
     protected void handleRemoveOrUpdate(
             @Nullable Set<String> removedKeys,
-            @Nullable Map<String, Follow> loadedOrUpdated,
+            @Nullable Map<String, FollowConfig> loadedOrUpdated,
             @Nonnull AssetUpdateQuery query
     ) {
         super.handleRemoveOrUpdate(removedKeys, loadedOrUpdated, query);
@@ -56,6 +56,8 @@ public final class FollowConfigStore extends HytaleAssetStore<
         if (loadedOrUpdated != null) touched.addAll(loadedOrUpdated.keySet());
         if (removedKeys != null) touched.addAll(removedKeys);
 
-        me.s3b4s5.summonlib.assets.store.util.SummonDefinitionRebuilder.rebuildModelsUsingFollow(touched);
+        me.s3b4s5.summonlib.assets.store.util.SummonDefinitionRebuilder.rebuildModelSummonsUsingFollow(touched);
     }
 }
+
+

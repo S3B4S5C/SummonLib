@@ -117,3 +117,5 @@ public final class FlyNpcMotionControllerCodec {
                 ).addValidator(Validators.greaterThanOrEqual(0.0)).add();
     }
 }
+
+

@@ -16,17 +16,18 @@ import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import com.hypixel.hytale.server.npc.entities.NPCEntity;
 import com.hypixel.hytale.server.npc.role.Role;
 import com.hypixel.hytale.server.npc.role.support.MarkedEntitySupport;
+import me.s3b4s5.summonlib.experimental.worm.component.WormComponent;
 import me.s3b4s5.summonlib.assets.config.npc.motion.FlyNpcMotionControllerConfig;
-import me.s3b4s5.summonlib.assets.config.npc.motion.NpcMotionController;
-import me.s3b4s5.summonlib.internal.impl.definition.NpcRoleSummonDefinition;
+import me.s3b4s5.summonlib.assets.config.npc.motion.NpcMotionControllerConfig;
+import me.s3b4s5.summonlib.internal.definition.NpcRoleSummonDefinition;
 import me.s3b4s5.summonlib.internal.targeting.SummonTargetSelector;
-import me.s3b4s5.summonlib.internal.tick.ContextUtil;
-import me.s3b4s5.summonlib.internal.tick.NpcUtil;
-import me.s3b4s5.summonlib.runtime.SummonAggroRuntime;
-import me.s3b4s5.summonlib.runtime.SummonIndexing;
+import me.s3b4s5.summonlib.internal.context.NpcLeashSupport;
+import me.s3b4s5.summonlib.internal.context.NpcTargetingSupport;
+import me.s3b4s5.summonlib.internal.context.SummonContextResolver;
+import me.s3b4s5.summonlib.internal.runtime.SummonIndexing;
+import me.s3b4s5.summonlib.internal.runtime.service.SummonRuntimeServices;
 import me.s3b4s5.summonlib.stats.SummonStats;
-import me.s3b4s5.summonlib.tags.SummonTag;
-import me.s3b4s5.summonlib.tags.WormTag;
+import me.s3b4s5.summonlib.internal.component.SummonComponent;
 import org.checkerframework.checker.nullness.compatqual.NonNullDecl;
 
 import java.util.ArrayList;
@@ -40,27 +41,25 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
     private static final double COMBAT_EYE_SCALE = 0.60;
     private static final double COMBAT_Y_MIN = 0.25;
     private static final double COMBAT_Y_MAX = 1.05;
+    private static final double OWNER_LEASH_TELEPORT_DISTANCE = 40.0;
+    private static final double OWNER_LEASH_TELEPORT_HEIGHT = 1.5;
 
-    private final ComponentType<EntityStore, SummonTag> summonTagType;
-    private final ComponentType<EntityStore, WormTag> wormTagType;
+    private final ComponentType<EntityStore, SummonComponent> summonTagType;
+    private final ComponentType<EntityStore, WormComponent> wormTagType;
 
     private final SummonTargetSelector targetSelector;
 
     private final ConcurrentHashMap<UUID, Ref<EntityStore>> lastTargetBySummon = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<UUID, Ref<EntityStore>> focusTargetByOwner = new ConcurrentHashMap<>();
-
     private final ConcurrentHashMap<UUID, Float> followLowTimerBySummon = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Float> followStuckTimerBySummon = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Double> followLastDistBySummon = new ConcurrentHashMap<>();
-
-    private final ConcurrentHashMap<UUID, Float> ownerMaintenanceCooldown = new ConcurrentHashMap<>();
 
     private final ConcurrentHashMap<UUID, FormationCache> formationByOwner = new ConcurrentHashMap<>();
     private final Query<EntityStore> formationQuery;
 
     public SummonNpcTargetSystem(
-            ComponentType<EntityStore, SummonTag> summonTagType,
-            ComponentType<EntityStore, WormTag> wormTagType
+            ComponentType<EntityStore, SummonComponent> summonTagType,
+            ComponentType<EntityStore, WormComponent> wormTagType
     ) {
         this.summonTagType = summonTagType;
         this.wormTagType = wormTagType;
@@ -112,7 +111,7 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
             @NonNullDecl Store<EntityStore> store,
             @NonNullDecl CommandBuffer<EntityStore> cb
     ) {
-        final ContextUtil.NpcSummonCtx ctx = ContextUtil.getNpcSummonCtxOrNull(
+        final SummonContextResolver.NpcSummonCtx ctx = SummonContextResolver.getNpcSummonCtxOrNull(
                 index, chunk, store, cb,
                 summonTagType, wormTagType
         );
@@ -133,11 +132,11 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
         final NpcRoleSummonDefinition def = ctx.def();
         final NpcRoleSummonDefinition.Formation formation = def.formation;
 
-        final NpcMotionController mc = def.motionController;
+        final NpcMotionControllerConfig mc = def.motionController;
         final FlyNpcMotionControllerConfig fly = (mc instanceof FlyNpcMotionControllerConfig f) ? f : null;
         final boolean isFly = (fly != null);
 
-        if (tryRunOwnerMaintenance(dt, ownerUuid, def.ownerMaintenanceCooldownSec)) {
+        if (SummonRuntimeServices.owners().tryRunMaintenance("npc-target", ownerUuid, dt, def.ownerMaintenanceCooldownSec)) {
             Ref<EntityStore> ownerRefMaint = ctx.ownerCtx().ownerRef();
             if (ownerRefMaint != null && ownerRefMaint.isValid()) {
                 enforceNpcSlotsAndRebuild(store, cb, ownerRefMaint, ownerUuid);
@@ -168,15 +167,15 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
         final boolean canAcquire = !forceReturn && distOwnerSelfSq <= (ownerAcquire * ownerAcquire);
 
         if (canAcquire) {
-            Ref<EntityStore> focus = SummonAggroRuntime.pullAggroFocus(
-                    store, ownerUuid, summonTagType, focusTargetByOwner
+            Ref<EntityStore> focus = SummonRuntimeServices.targets().pullAggroOrFocus(
+                    store, ownerUuid, summonTagType
             );
 
             if (focus != null && (!focus.isValid() || !targetSelector.isAlive(focus, store))) {
-                focusTargetByOwner.remove(ownerUuid);
+                SummonRuntimeServices.targets().clearRuntimeTarget(ownerUuid);
                 focus = null;
             } else if (focus != null) {
-                focusTargetByOwner.put(ownerUuid, focus);
+                SummonRuntimeServices.targets().rememberRuntimeTarget(ownerUuid, focus);
             }
 
             if (focus != null) {
@@ -201,7 +200,7 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
                 } else {
                     double distTargetOwnerSq = ownerPos.distanceSquaredTo(tt.getPosition());
                     if (distTargetOwnerSq > (targetMaxFromOwner * targetMaxFromOwner)) {
-                        focusTargetByOwner.remove(ownerUuid);
+                        SummonRuntimeServices.targets().clearRuntimeTarget(ownerUuid);
                         targetRef = null;
                     }
                 }
@@ -227,7 +226,7 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
                 dt, store, cb,
                 selfUuid, ownerUuid,
                 selfRef, ownerRef,
-                ownerPos, selfPos,
+                ownerPos, ownerT.getRotation(), selfPos,
                 targetRef,
                 formation,
                 fly
@@ -248,6 +247,7 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
             Ref<EntityStore> selfRef,
             Ref<EntityStore> ownerRef,
             Vector3d ownerPos,
+            com.hypixel.hytale.math.vector.Vector3f ownerRot,
             Vector3d selfPos,
             Ref<EntityStore> targetRef,
             NpcRoleSummonDefinition.Formation formation,
@@ -263,12 +263,12 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
                 Vector3d leash = new Vector3d(tt.getPosition());
 
                 if (isFly) {
-                    double eye = NpcUtil.computeHeadOffset(store, targetRef);
+                    double eye = NpcTargetingSupport.computeHeadOffset(store, targetRef);
                     double combatYOffset = clamp(eye * COMBAT_EYE_SCALE, COMBAT_Y_MIN, COMBAT_Y_MAX);
                     leash.y += combatYOffset;
                 }
 
-                NpcUtil.setLeashToPoint(selfRef, targetRef, store, cb, leash);
+                NpcLeashSupport.setLeashToPoint(selfRef, targetRef, store, cb, leash);
                 return isFly ? leash.y : Double.NaN;
             }
         }
@@ -292,7 +292,17 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
             leash.y += desiredYOffset;
         }
 
-        NpcUtil.setLeashToPoint(selfRef, ownerRef, store, cb, leash);
+        NpcLeashSupport.setLeashToPoint(selfRef, ownerRef, store, cb, leash);
+        NpcLeashSupport.snapToLeashPointIfTooFar(
+                selfRef,
+                store,
+                cb,
+                ownerPos,
+                ownerRot,
+                leash,
+                OWNER_LEASH_TELEPORT_DISTANCE,
+                OWNER_LEASH_TELEPORT_HEIGHT
+        );
         return isFly ? leash.y : Double.NaN;
     }
 
@@ -470,7 +480,7 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
 
         store.forEachChunk(formationQuery, (c, ccb) -> {
             for (int i = 0; i < c.size(); i++) {
-                SummonTag tag = c.getComponent(i, summonTagType);
+                SummonComponent tag = c.getComponent(i, summonTagType);
                 if (tag == null) continue;
                 if (!ownerUuid.equals(tag.owner)) continue;
 
@@ -665,20 +675,9 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
     }
 
     private void dropAllTargets(UUID selfUuid, UUID ownerUuid, MarkedEntitySupport marked) {
-        focusTargetByOwner.remove(ownerUuid);
+        SummonRuntimeServices.targets().clearRuntimeTarget(ownerUuid);
         lastTargetBySummon.remove(selfUuid);
         marked.setMarkedEntity(MarkedEntitySupport.DEFAULT_TARGET_SLOT, null);
-    }
-
-    private boolean tryRunOwnerMaintenance(float dt, UUID ownerUuid, float cooldownSec) {
-        float cd = ownerMaintenanceCooldown.getOrDefault(ownerUuid, 0f);
-        cd = Math.max(0f, cd - dt);
-        if (cd > 0f) {
-            ownerMaintenanceCooldown.put(ownerUuid, cd);
-            return false;
-        }
-        ownerMaintenanceCooldown.put(ownerUuid, Math.max(0f, cooldownSec));
-        return true;
     }
 
     private void enforceNpcSlotsAndRebuild(
@@ -701,10 +700,9 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
                 NetworkId.getComponentType(),
                 TransformComponent.getComponentType()
         );
-
         store.forEachChunk(q, (c, ccb) -> {
             for (int i = 0; i < c.size(); i++) {
-                final SummonTag t = c.getComponent(i, summonTagType);
+                final SummonComponent t = c.getComponent(i, summonTagType);
                 if (t == null) continue;
                 if (!ownerUuid.equals(t.owner)) continue;
                 refs.add(c.getReferenceTo(i));
@@ -713,28 +711,28 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
 
         int usedSlots = 0;
         for (Ref<EntityStore> r : refs) {
-            final SummonTag t = store.getComponent(r, summonTagType);
+            final SummonComponent t = store.getComponent(r, summonTagType);
             if (t != null) usedSlots += Math.max(0, t.slotCost);
         }
 
         refs.sort(Comparator.comparingLong((Ref<EntityStore> r) -> {
-            final SummonTag t = store.getComponent(r, summonTagType);
+            final SummonComponent t = store.getComponent(r, summonTagType);
             return (t != null) ? t.spawnSeq : Long.MIN_VALUE;
         }));
 
         while (usedSlots > capSlots && !refs.isEmpty()) {
             final int last = refs.size() - 1;
             final Ref<EntityStore> r = refs.remove(last);
-            final SummonTag t = store.getComponent(r, summonTagType);
+            final SummonComponent t = store.getComponent(r, summonTagType);
             if (t != null) usedSlots -= Math.max(0, t.slotCost);
             cb.removeEntity(r, RemoveReason.REMOVE);
         }
 
         SummonIndexing.rebuildOwnerIndices(store, cb, summonTagType, ownerUuid, refs);
 
-        final Ref<EntityStore> focus = focusTargetByOwner.get(ownerUuid);
+        final Ref<EntityStore> focus = SummonRuntimeServices.targets().pullAggroOrFocus(store, ownerUuid, summonTagType);
         if (focus != null && (!focus.isValid() || !targetSelector.isAlive(focus, store))) {
-            focusTargetByOwner.remove(ownerUuid);
+            SummonRuntimeServices.targets().clearRuntimeTarget(ownerUuid);
         }
     }
 
@@ -768,3 +766,6 @@ public class SummonNpcTargetSystem extends EntityTickingSystem<EntityStore> {
         return h;
     }
 }
+
+
+

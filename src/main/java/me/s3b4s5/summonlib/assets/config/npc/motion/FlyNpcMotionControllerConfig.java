@@ -5,7 +5,7 @@ import me.s3b4s5.summonlib.assets.codec.npc.motion.FlyNpcMotionControllerCodec;
 
 import javax.annotation.Nonnull;
 
-public final class FlyNpcMotionControllerConfig extends NpcMotionController {
+public final class FlyNpcMotionControllerConfig extends NpcMotionControllerConfig {
 
     @Nonnull
     public static final String ASSET_TYPE_ID = "Fly";
@@ -81,3 +81,5 @@ public final class FlyNpcMotionControllerConfig extends NpcMotionController {
         }).build();
     }
 }
+
+

@@ -1,0 +1,7 @@
+{
+  "Type": "Orbit",
+  "Id": "ExampleOrbitFollow",
+  "Radius": 1.4,
+  "BackOffset": 0.4,
+  "HomeHeight": 0.8
+}

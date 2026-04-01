@@ -38,3 +38,5 @@ public final class DefaultSummonAnimator implements SummonAnimator {
         lastBaseKeyBySummon.remove(summonUuid);
     }
 }
+
+

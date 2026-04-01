@@ -7,14 +7,14 @@ import com.hypixel.hytale.codec.builder.BuilderCodec;
 import com.hypixel.hytale.codec.validation.Validators;
 import me.s3b4s5.summonlib.assets.codec.SummonCommonCodec;
 import me.s3b4s5.summonlib.assets.config.npc.NpcSummonConfig;
-import me.s3b4s5.summonlib.assets.config.npc.motion.NpcMotionController;
+import me.s3b4s5.summonlib.assets.config.npc.motion.NpcMotionControllerConfig;
 
 public final class NpcSummonConfigCodec {
 
     private NpcSummonConfigCodec() {}
 
     public static final Codec<String> NPC_MOTION_CONTROLLER_REF =
-            new ContainedAssetCodec<>(NpcMotionController.class, NpcMotionController.CODEC);
+            new ContainedAssetCodec<>(NpcMotionControllerConfig.class, NpcMotionControllerConfig.CODEC);
 
     public static BuilderCodec<NpcSummonConfig> create() {
         var b = BuilderCodec.builder(NpcSummonConfig.class, NpcSummonConfig::new);
@@ -148,3 +148,5 @@ public final class NpcSummonConfigCodec {
         return b.build();
     }
 }
+
+

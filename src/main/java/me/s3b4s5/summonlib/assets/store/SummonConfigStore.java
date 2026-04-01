@@ -4,13 +4,13 @@ import com.hypixel.hytale.assetstore.AssetUpdateQuery;
 import com.hypixel.hytale.assetstore.map.IndexedLookupTableAssetMap;
 import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.server.core.asset.HytaleAssetStore;
-import me.s3b4s5.summonlib.api.SummonRegistry;
+import me.s3b4s5.summonlib.assets.store.util.SummonDefinitionRebuilder;
 import me.s3b4s5.summonlib.assets.config.model.ModelSummonConfig;
 import me.s3b4s5.summonlib.assets.config.SummonConfig;
-import me.s3b4s5.summonlib.internal.impl.definition.SummonDefinition;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -39,7 +39,7 @@ public final class SummonConfigStore extends HytaleAssetStore<
         b.setPath(PATH)
                 .setCodec(SummonConfig.CODEC)
                 .setKeyFunction(SummonConfig::getId)
-                .setIdProvider(ModelSummonConfig.class) // default type while only Model exists
+                .setIdProvider(ModelSummonConfig.class) // default editor-created subtype
                 .setIsUnknown(SummonConfig::isUnknown);
 
         b.setReplaceOnRemove(SummonConfigStore::missingModel);
@@ -55,17 +55,10 @@ public final class SummonConfigStore extends HytaleAssetStore<
     ) {
         super.handleRemoveOrUpdate(removedKeys, loadedOrUpdated, query);
 
-        if (loadedOrUpdated != null) {
-            for (SummonConfig cfg : loadedOrUpdated.values()) {
-                if (cfg == null || cfg.isUnknown()) continue;
-
-                // For now only Model exists
-                if (cfg instanceof ModelSummonConfig model) {
-                    SummonDefinition def = model.toDefinition((m) -> m.buildFollowController());
-                    if (def != null) SummonRegistry.register(def);
-                }
-            }
-        }
+        Set<String> touched = new HashSet<>();
+        if (loadedOrUpdated != null) touched.addAll(loadedOrUpdated.keySet());
+        if (removedKeys != null) touched.addAll(removedKeys);
+        SummonDefinitionRebuilder.rebuildSummons(touched);
 
         LOGGER.atInfo().log("[SummonConfigStore] loaded=%d removed=%d",
                 loadedOrUpdated == null ? 0 : loadedOrUpdated.size(),
@@ -101,3 +94,5 @@ public final class SummonConfigStore extends HytaleAssetStore<
         return cfg;
     }
 }
+
+

@@ -12,19 +12,18 @@ import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import com.hypixel.hytale.server.npc.entities.NPCEntity;
 import com.hypixel.hytale.server.npc.role.Role;
 import com.hypixel.hytale.server.npc.role.support.MarkedEntitySupport;
-import me.s3b4s5.summonlib.tags.SummonTag;
+import me.s3b4s5.summonlib.internal.component.SummonComponent;
 
 import javax.annotation.Nonnull;
 import java.util.UUID;
 
 public class SummonAggroRedirectSystem extends EntityTickingSystem<EntityStore> {
 
-    private final ComponentType<EntityStore, SummonTag> summonTagType;
+    private final ComponentType<EntityStore, SummonComponent> summonTagType;
 
-    public SummonAggroRedirectSystem(ComponentType<EntityStore, SummonTag> summonTagType) {
+    public SummonAggroRedirectSystem(ComponentType<EntityStore, SummonComponent> summonTagType) {
         this.summonTagType = summonTagType;
     }
-
     @Override
     public Query<EntityStore> getQuery() {
         ComponentType<EntityStore, NPCEntity> npcType = NPCEntity.getComponentType();
@@ -64,7 +63,7 @@ public class SummonAggroRedirectSystem extends EntityTickingSystem<EntityStore> 
         final Ref<EntityStore> curTarget = marked.getMarkedEntityRef(MarkedEntitySupport.DEFAULT_TARGET_SLOT);
         if (curTarget == null || !curTarget.isValid()) return;
 
-        final SummonTag victimTag = store.getComponent(curTarget, summonTagType);
+        final SummonComponent victimTag = store.getComponent(curTarget, summonTagType);
         if (victimTag == null) return;
 
         final Ref<EntityStore> ownerRef = resolveOwnerRef(victimTag.getOwnerUuid());
@@ -79,3 +78,6 @@ public class SummonAggroRedirectSystem extends EntityTickingSystem<EntityStore> 
         return owner.getReference();
     }
 }
+
+
+

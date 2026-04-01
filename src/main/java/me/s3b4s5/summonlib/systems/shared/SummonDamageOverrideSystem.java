@@ -14,10 +14,11 @@ import com.hypixel.hytale.server.core.modules.entity.damage.DamageModule;
 import com.hypixel.hytale.server.core.modules.entitystats.EntityStatMap;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
-import me.s3b4s5.summonlib.internal.impl.definition.SummonDefinition;
-import me.s3b4s5.summonlib.internal.tick.ContextUtil;
+import me.s3b4s5.summonlib.internal.definition.SummonDefinition;
+import me.s3b4s5.summonlib.internal.context.SummonReferenceResolver;
+import me.s3b4s5.summonlib.internal.runtime.service.SummonRuntimeServices;
 import me.s3b4s5.summonlib.stats.SummonStats;
-import me.s3b4s5.summonlib.tags.SummonTag;
+import me.s3b4s5.summonlib.internal.component.SummonComponent;
 
 import javax.annotation.Nonnull;
 
@@ -26,9 +27,9 @@ public final class SummonDamageOverrideSystem extends DamageEventSystem {
     private static final MetaKey<Boolean> META_SUMMONLIB_DAMAGE_OVERRIDDEN =
             Damage.META_REGISTRY.registerMetaObject(d -> Boolean.FALSE);
 
-    private final ComponentType<EntityStore, SummonTag> summonTagType;
+    private final ComponentType<EntityStore, SummonComponent> summonTagType;
 
-    public SummonDamageOverrideSystem(ComponentType<EntityStore, SummonTag> summonTagType) {
+    public SummonDamageOverrideSystem(ComponentType<EntityStore, SummonComponent> summonTagType) {
         this.summonTagType = summonTagType;
     }
 
@@ -72,13 +73,13 @@ public final class SummonDamageOverrideSystem extends DamageEventSystem {
 
         if (attackerRef == null || !attackerRef.isValid()) return;
 
-        final SummonTag summonTag = store.getComponent(attackerRef, summonTagType);
+        final SummonComponent summonTag = store.getComponent(attackerRef, summonTagType);
         if (summonTag == null) return;
 
-        final SummonDefinition def = ContextUtil.resolveDefOrNull(summonTag);
+        final SummonDefinition def = SummonReferenceResolver.resolveDefOrNull(summonTag);
         if (def == null) return;
 
-        final Ref<EntityStore> ownerRef = ContextUtil.resolveOwnerRef(summonTag);
+        final Ref<EntityStore> ownerRef = SummonReferenceResolver.resolveOwnerRef(summonTag);
         if (ownerRef == null || !ownerRef.isValid()) return;
 
         final PlayerRef pr = store.getComponent(ownerRef, PlayerRef.getComponentType());
@@ -90,7 +91,7 @@ public final class SummonDamageOverrideSystem extends DamageEventSystem {
             damage.setSource(new Damage.EntitySource(ownerRef));
         }
 
-        final float mult = SummonStats.getSummonDamageMultiplier(store, cb, ownerRef);
+        final float mult = SummonRuntimeServices.stats().getSummonDamageMultiplier(store, cb, ownerRef);
         if (mult <= 0f || !Float.isFinite(mult)) {
             damage.setAmount(0f);
             return;
@@ -99,3 +100,6 @@ public final class SummonDamageOverrideSystem extends DamageEventSystem {
         damage.setAmount(def.damage * mult);
     }
 }
+
+
+

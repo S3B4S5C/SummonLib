@@ -5,9 +5,8 @@ import com.hypixel.hytale.server.core.modules.entity.component.TransformComponen
 import me.s3b4s5.summonlib.api.follow.OwnerPitchClamp;
 import me.s3b4s5.summonlib.api.follow.HomeRotationOffsets;
 
-public final class LerpTransformMovement implements SummonMovement {
+public final class LerpTransformMovement {
 
-    @Override
     public void moveTowards(float dt, Vector3d cur, Vector3d target, double speed, TransformComponent t) {
         double alpha = Math.min(1.0, dt * speed);
         t.setPosition(new Vector3d(
@@ -17,13 +16,10 @@ public final class LerpTransformMovement implements SummonMovement {
         ));
     }
 
-    // Compat: deja el viejo por si otros sistemas lo usan
-    @Override
     public void faceOwner(TransformComponent t, Object ownerRotationObj, double ownerYawRad, Object controller) {
         faceOwner(t, ownerRotationObj, ownerYawRad, controller, 0, 1);
     }
 
-    // NUEVO: aplica clamp y luego spread offsets
     public void faceOwner(
             TransformComponent t,
             Object ownerRotationObj,
@@ -38,7 +34,6 @@ public final class LerpTransformMovement implements SummonMovement {
         OwnerPitchClamp clamp = (controller instanceof OwnerPitchClamp c) ? c : null;
         HomeRotationOffsets offsets = (controller instanceof HomeRotationOffsets o) ? o : null;
 
-        // Base owner rot
         double pitchRad;
         double yawRad;
         double rollRad;
@@ -53,12 +48,10 @@ public final class LerpTransformMovement implements SummonMovement {
             rollRad  = 0.0;
         }
 
-        // 1) clamp primero (como querías)
         double clampedPitch = (clamp != null)
                 ? clamp.clampOwnerPitch(pitchRad)
                 : clamp(pitchRad, minPitch, maxPitch);
 
-        // 2) luego offsets (spread)
         if (offsets != null) {
             int gi = Math.max(0, groupIndex);
             int gt = Math.max(1, groupTotal);
@@ -74,7 +67,6 @@ public final class LerpTransformMovement implements SummonMovement {
         rot.setRoll((float) rollRad);
     }
 
-    @Override
     public void faceTarget(TransformComponent t, Vector3d from, Vector3d to) {
         double vx = to.x - from.x;
         double vz = to.z - from.z;
@@ -89,3 +81,5 @@ public final class LerpTransformMovement implements SummonMovement {
         return (v < a) ? a : (v > b) ? b : v;
     }
 }
+
+

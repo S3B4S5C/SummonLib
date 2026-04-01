@@ -1,0 +1,17 @@
+{
+  "Type": "Model",
+  "Id": "ExampleOrbitBlade",
+  "SlotCost": 1,
+  "Damage": 6.0,
+  "DetectRadius": 14.0,
+  "FollowId": "ExampleOrbitFollow",
+  "ModelAssets": [
+    "Entity/ExampleMod/Models/OrbitBlade"
+  ],
+  "ModelScale": 1.0,
+  "FollowSpeed": 16.0,
+  "TravelToTargetSpeed": 10.0,
+  "HitDistance": 1.2,
+  "HitDamageDelaySec": 0.14,
+  "AttackIntervalSec": 0.45
+}

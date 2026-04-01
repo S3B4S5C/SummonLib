@@ -16,20 +16,22 @@ import com.hypixel.hytale.server.core.modules.entity.damage.Damage;
 import com.hypixel.hytale.server.core.modules.entity.tracker.NetworkId;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import com.hypixel.hytale.server.npc.entities.NPCEntity;
-import me.s3b4s5.summonlib.api.follow.BackOrbitFollowController;
-import me.s3b4s5.summonlib.api.follow.ModelFollowController;
-import me.s3b4s5.summonlib.internal.Logger;
+import me.s3b4s5.summonlib.experimental.worm.WormSupport;
+import me.s3b4s5.summonlib.experimental.worm.component.WormComponent;
+import me.s3b4s5.summonlib.api.follow.ModelFollowBehavior;
+import me.s3b4s5.summonlib.api.follow.OrbitFormationFollowBehavior;
 import me.s3b4s5.summonlib.internal.animation.DefaultSummonAnimator;
 import me.s3b4s5.summonlib.internal.movement.LerpTransformMovement;
 import me.s3b4s5.summonlib.internal.targeting.SummonTargetSelector;
-import me.s3b4s5.summonlib.internal.tick.ContextUtil;
-import me.s3b4s5.summonlib.internal.impl.definition.ModelSummonDefinition;
-import me.s3b4s5.summonlib.runtime.SummonAggroRuntime;
-import me.s3b4s5.summonlib.runtime.SummonIndexing;
+import me.s3b4s5.summonlib.internal.context.OwnerContextResolver;
+import me.s3b4s5.summonlib.internal.context.SummonContextResolver;
+import me.s3b4s5.summonlib.internal.definition.ModelSummonDefinition;
+import me.s3b4s5.summonlib.internal.runtime.SummonIndexing;
+import me.s3b4s5.summonlib.internal.runtime.service.SummonRuntimeServices;
 import me.s3b4s5.summonlib.stats.SummonStats;
-import me.s3b4s5.summonlib.systems.shared.SummonCombatFollowShared;
-import me.s3b4s5.summonlib.tags.SummonTag;
-import me.s3b4s5.summonlib.tags.WormTag;
+import me.s3b4s5.summonlib.systems.shared.SummonAnimationSlots;
+import me.s3b4s5.summonlib.systems.shared.SummonMath;
+import me.s3b4s5.summonlib.internal.component.SummonComponent;
 import org.checkerframework.checker.nullness.compatqual.NonNullDecl;
 
 import javax.annotation.Nullable;
@@ -46,20 +48,18 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
     private static final String ANIM_ATTACK = "Attack";
 
     private static final AnimationSlot SLOT_BASE =
-            SummonCombatFollowShared.resolveSlot("Idle", "Passive", "Movement");
+            SummonAnimationSlots.resolveSlot("Idle", "Passive", "Movement");
 
-    private static final ModelFollowController DEFAULT_CONTROLLER =
-            new BackOrbitFollowController(0.4, 1.4, 120.0, 0.8, 0.9, 0.8 * 0.6);
+    private static final ModelFollowBehavior DEFAULT_CONTROLLER =
+            new OrbitFormationFollowBehavior(0.4, 1.4, 120.0, 0.8, 0.9, 0.8 * 0.6);
 
     private static final LerpTransformMovement MOVE_LERP = new LerpTransformMovement();
 
     private final DefaultSummonAnimator animator = new DefaultSummonAnimator(SLOT_BASE);
     private final SummonTargetSelector targetSelector;
 
-    private final ComponentType<EntityStore, SummonTag> summonTagType;
-    private final ComponentType<EntityStore, WormTag> wormTagType;
-
-    private final Logger logger = new Logger("[ModelCombatFollowSystem]");
+    private final ComponentType<EntityStore, SummonComponent> summonTagType;
+    private final ComponentType<EntityStore, WormComponent> wormTagType;
 
     private static final boolean DEBUG = false;
 
@@ -70,12 +70,9 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
     private final ConcurrentHashMap<UUID, Float> pendingDamageDelayBySummon = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Ref<EntityStore>> pendingDamageTargetBySummon = new ConcurrentHashMap<>();
 
-    private final ConcurrentHashMap<UUID, Ref<EntityStore>> focusTargetByOwner = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<UUID, Float> ownerMaintenanceCooldown = new ConcurrentHashMap<>();
-
     public SummonCombatFollowSystem(
-            ComponentType<EntityStore, SummonTag> summonTagType,
-            ComponentType<EntityStore, WormTag> wormTagType
+            ComponentType<EntityStore, SummonComponent> summonTagType,
+            ComponentType<EntityStore, WormComponent> wormTagType
     ) {
         this.summonTagType = summonTagType;
         this.wormTagType = wormTagType;
@@ -101,7 +98,7 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
             @NonNullDecl Store<EntityStore> store,
             @NonNullDecl CommandBuffer<EntityStore> cb
     ) {
-        final ContextUtil.ModelSummonCtx ctx = ContextUtil.getModelSummonCtxOrNull(
+        final SummonContextResolver.ModelSummonCtx ctx = SummonContextResolver.getModelSummonCtxOrNull(
                 index, chunk, store, cb,
                 summonTagType, wormTagType
         );
@@ -112,8 +109,8 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
         if (NPCEntity.getComponentType() == null) return;
         if (store.getComponent(selfRef, NPCEntity.getComponentType()) != null) return;
 
-        final WormTag wt = store.getComponent(selfRef, wormTagType);
-        if (wt != null && wt.segmentIndex > 0) return;
+        final WormComponent wt = store.getComponent(selfRef, wormTagType);
+        if (WormSupport.isWormSegment(wt)) return;
 
         final ModelSummonDefinition def = ctx.def();
 
@@ -139,10 +136,10 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
 
         final float ownerMaintenanceCooldownSec = def.ownerMaintenanceCooldownSec;
 
-        final ModelFollowController controller =
+        final ModelFollowBehavior controller =
                 (def.followController != null) ? def.followController : DEFAULT_CONTROLLER;
 
-        if (tryRunOwnerMaintenance(dt, ownerUuid, ownerMaintenanceCooldownSec)) {
+        if (SummonRuntimeServices.owners().tryRunMaintenance("model-follow", ownerUuid, dt, ownerMaintenanceCooldownSec)) {
             enforceSlotsAndRebuild(store, cb, ctx.ownerCtx().ownerRef(), ownerUuid);
         }
 
@@ -178,7 +175,7 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
         final boolean hasTarget = (targetRef != null && targetRef.isValid());
 
         if (hasTarget) {
-            if (SummonCombatFollowShared.distSq(curPos, ownerPos) > (leashSummonToOwner * leashSummonToOwner)) {
+            if (SummonMath.distSq(curPos, ownerPos) > (leashSummonToOwner * leashSummonToOwner)) {
                 dropAndGoHome(dt, store, summonUuid, selfRef, ctx.selfT(), ctx.tag(), controller, ctx.ownerCtx(), home, followSpeed, true, true);
                 return;
             }
@@ -186,7 +183,7 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
             final TransformComponent tt = store.getComponent(targetRef, TransformComponent.getComponentType());
             if (tt != null) {
                 final Vector3d tp = tt.getPosition();
-                if (SummonCombatFollowShared.distSq(tp, ownerPos) > (leashTargetToOwner * leashTargetToOwner)) {
+                if (SummonMath.distSq(tp, ownerPos) > (leashTargetToOwner * leashTargetToOwner)) {
                     dropAndGoHome(dt, store, summonUuid, selfRef, ctx.selfT(), ctx.tag(), controller, ctx.ownerCtx(), home, followSpeed, true, true);
                     return;
                 }
@@ -219,7 +216,7 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
 
         if (hasTarget) {
             if (!targetSelector.isAlive(targetRef, store)) {
-                focusTargetByOwner.remove(ownerUuid);
+                SummonRuntimeServices.targets().clearRuntimeTarget(ownerUuid);
                 dropSummonTarget(summonUuid);
                 return;
             }
@@ -267,7 +264,7 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
                     && pendingDamageDelayBySummon.getOrDefault(summonUuid, 0f) <= 0f
                     && attackCooldownBySummon.getOrDefault(summonUuid, 0f) <= 0f) {
 
-                final double d2 = SummonCombatFollowShared.distSq(anchor, ctx.selfT().getPosition());
+                final double d2 = SummonMath.distSq(anchor, ctx.selfT().getPosition());
                 if (d2 <= (hitDistance * hitDistance)) {
                     if (store.getComponent(targetRef, NetworkId.getComponentType()) != null) {
                         pendingDamageTargetBySummon.put(summonUuid, targetRef);
@@ -287,31 +284,31 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
         goHome(dt, store, summonUuid, selfRef, ctx.selfT(), ctx.tag(), controller, ctx.ownerCtx(), home, followSpeed, false, false);
     }
 
-    private static int resolveAttackGi(SummonTag tag) {
+    private static int resolveAttackGi(SummonComponent tag) {
         final int gt = tag.globalTotal;
         if (gt > 1) return Math.max(0, tag.globalIndex);
         return Math.max(0, tag.groupIndex);
     }
 
-    private static int resolveAttackGt(SummonTag tag) {
+    private static int resolveAttackGt(SummonComponent tag) {
         final int gt = tag.globalTotal;
         if (gt > 1) return gt;
         return Math.max(1, tag.groupTotal);
     }
 
     private @Nullable Ref<EntityStore> pullAggroFocusStrict(Store<EntityStore> store, UUID ownerUuid) {
-        final Ref<EntityStore> focus = SummonAggroRuntime.pullAggroFocus(
-                store, ownerUuid, summonTagType, focusTargetByOwner
+        final Ref<EntityStore> focus = SummonRuntimeServices.targets().pullAggroOrFocus(
+                store, ownerUuid, summonTagType
         );
         if (focus == null) {
-            focusTargetByOwner.remove(ownerUuid);
+            SummonRuntimeServices.targets().clearRuntimeTarget(ownerUuid);
             return null;
         }
         if (!focus.isValid() || !targetSelector.isAlive(focus, store)) {
-            focusTargetByOwner.remove(ownerUuid);
+            SummonRuntimeServices.targets().clearRuntimeTarget(ownerUuid);
             return null;
         }
-        focusTargetByOwner.put(ownerUuid, focus);
+        SummonRuntimeServices.targets().rememberRuntimeTarget(ownerUuid, focus);
         return focus;
     }
 
@@ -321,15 +318,15 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
             UUID summonUuid,
             Ref<EntityStore> summonRef,
             TransformComponent summonT,
-            SummonTag tag,
-            ModelFollowController controller,
-            ContextUtil.OwnerCtx ownerCtx,
+            SummonComponent tag,
+            ModelFollowBehavior controller,
+            OwnerContextResolver.OwnerCtx ownerCtx,
             Vector3d home,
             double followSpeed,
             boolean clearOwnerFocus,
             boolean hardAnim
     ) {
-        if (clearOwnerFocus) focusTargetByOwner.remove(ownerCtx.ownerUuid());
+        if (clearOwnerFocus) SummonRuntimeServices.targets().clearRuntimeTarget(ownerCtx.ownerUuid());
         dropSummonTarget(summonUuid);
         goHome(dt, store, summonUuid, summonRef, summonT, tag, controller, ownerCtx, home, followSpeed, true, hardAnim);
     }
@@ -340,16 +337,16 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
             UUID summonUuid,
             Ref<EntityStore> summonRef,
             TransformComponent summonT,
-            SummonTag tag,
-            ModelFollowController controller,
-            ContextUtil.OwnerCtx ownerCtx,
+            SummonComponent tag,
+            ModelFollowBehavior controller,
+            OwnerContextResolver.OwnerCtx ownerCtx,
             Vector3d home,
             double followSpeed,
             boolean forceMove,
             boolean hardAnim
     ) {
         final Vector3d cur = summonT.getPosition();
-        final boolean returning = SummonCombatFollowShared.distSq(home, cur) > 0.02;
+        final boolean returning = SummonMath.distSq(home, cur) > 0.02;
 
         final String anim = forceMove ? ANIM_MOVE : (returning ? ANIM_MOVE : ANIM_IDLE);
         animator.setBaseAnim(summonUuid, summonRef, anim, true, store, hardAnim);
@@ -371,7 +368,7 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
             Ref<EntityStore> summonRef,
             Store<EntityStore> store,
             @Nullable Ref<EntityStore> targetRef,
-            SummonTag tag,
+            SummonComponent tag,
             boolean keepAttack,
             float attackInterval
     ) {
@@ -386,7 +383,7 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
             final int gi = Math.max(0, tag.globalIndex);
             final int gt = Math.max(1, tag.globalTotal);
 
-            final float stagger = SummonCombatFollowShared.computeStartStagger(gi, gt, attackInterval);
+            final float stagger = SummonMath.computeStartStagger(gi, gt, attackInterval);
             startDelayBySummon.put(summonUuid, stagger);
 
             final boolean startNow = (stagger <= 0f);
@@ -432,7 +429,7 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
     private void tickCooldownsAndDamage(
             float dt,
             UUID summonUuid,
-            ContextUtil.ModelSummonCtx ctx,
+            SummonContextResolver.ModelSummonCtx ctx,
             Store<EntityStore> store,
             CommandBuffer<EntityStore> cb,
             float hitDamage,
@@ -494,17 +491,6 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
         lastTargetBySummon.remove(summonUuid);
     }
 
-    private boolean tryRunOwnerMaintenance(float dt, UUID ownerUuid, float cooldownSec) {
-        float cd = ownerMaintenanceCooldown.getOrDefault(ownerUuid, 0f);
-        cd = Math.max(0f, cd - dt);
-        if (cd > 0f) {
-            ownerMaintenanceCooldown.put(ownerUuid, cd);
-            return false;
-        }
-        ownerMaintenanceCooldown.put(ownerUuid, Math.max(0f, cooldownSec));
-        return true;
-    }
-
     private void enforceSlotsAndRebuild(
             Store<EntityStore> store,
             CommandBuffer<EntityStore> cb,
@@ -523,7 +509,7 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
 
         store.forEachChunk(q, (chunk, ccb) -> {
             for (int i = 0; i < chunk.size(); i++) {
-                final SummonTag t = chunk.getComponent(i, summonTagType);
+                final SummonComponent t = chunk.getComponent(i, summonTagType);
                 if (t == null) continue;
                 if (!ownerUuid.equals(t.owner)) continue;
                 refs.add(chunk.getReferenceTo(i));
@@ -532,27 +518,30 @@ public class SummonCombatFollowSystem extends EntityTickingSystem<EntityStore> {
 
         int usedSlots = 0;
         for (Ref<EntityStore> r : refs) {
-            final SummonTag t = store.getComponent(r, summonTagType);
+            final SummonComponent t = store.getComponent(r, summonTagType);
             if (t != null) usedSlots += Math.max(0, t.slotCost);
         }
 
         refs.sort(Comparator.comparingLong((Ref<EntityStore> r) -> {
-            final SummonTag t = store.getComponent(r, summonTagType);
+            final SummonComponent t = store.getComponent(r, summonTagType);
             return (t != null) ? t.spawnSeq : Long.MIN_VALUE;
         }).reversed());
 
         while (usedSlots > capSlots && !refs.isEmpty()) {
             final Ref<EntityStore> r = refs.removeFirst();
-            final SummonTag t = store.getComponent(r, summonTagType);
+            final SummonComponent t = store.getComponent(r, summonTagType);
             if (t != null) usedSlots -= Math.max(0, t.slotCost);
             cb.removeEntity(r, RemoveReason.REMOVE);
         }
 
         SummonIndexing.rebuildOwnerIndices(store, cb, summonTagType, ownerUuid, refs);
 
-        final Ref<EntityStore> focus = focusTargetByOwner.get(ownerUuid);
+        final Ref<EntityStore> focus = SummonRuntimeServices.targets().pullAggroOrFocus(store, ownerUuid, summonTagType);
         if (focus != null && (!focus.isValid() || !targetSelector.isAlive(focus, store))) {
-            focusTargetByOwner.remove(ownerUuid);
+            SummonRuntimeServices.targets().clearRuntimeTarget(ownerUuid);
         }
     }
 }
+
+
+

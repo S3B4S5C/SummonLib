@@ -5,7 +5,7 @@ import me.s3b4s5.summonlib.assets.config.npc.motion.WalkNpcMotionControllerConfi
 
 /**
  * Walk motion controller has no vertical/Y config for now.
- * This file exists to keep the architecture consistent (like Follow codecs).
+ * This file exists to keep the architecture consistent with the follow config codecs.
  */
 public final class WalkNpcMotionControllerCodec {
 
@@ -18,3 +18,5 @@ public final class WalkNpcMotionControllerCodec {
         return b;
     }
 }
+
+

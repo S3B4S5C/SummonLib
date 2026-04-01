@@ -11,15 +11,14 @@ import com.hypixel.hytale.codec.Codec;
 import javax.annotation.Nonnull;
 
 /**
- * Base "SummonConfig" asset type.
+ * Base summon asset type.
  *
- * Goal:
- * - One AssetStore path (e.g. Entity/SummonLib/Summons)
- * - Multiple subtypes selectable via JSON "Type" (Model / Npc / Worm / ...)
+ * <p>One asset store path hosts multiple summon subtypes selected by the JSON
+ * {@code Type} field, for example {@code Model} and {@code Npc}.</p>
  *
- *   SummonConfig.CODEC.register("Model", ModelSummonConfig.class, ModelSummonConfig.ABSTRACT_CODEC);
- *   SummonConfig.CODEC.register("Npc",   NpcSummonConfig.class,   NpcSummonConfig.ABSTRACT_CODEC);
- *   SummonConfig.CODEC.register("Worm",  WormSummonConfig.class,  WormSummonConfig.ABSTRACT_CODEC);
+ * <p>Flow:
+ * summon JSON -> {@code SummonConfig} subtype -> summon definition resolver ->
+ * internal runtime definition -> ECS systems.</p>
  */
 public abstract class SummonConfig extends BaseSummonConfig
         implements JsonAssetWithMap<String, IndexedLookupTableAssetMap<String, SummonConfig>> {
@@ -28,8 +27,11 @@ public abstract class SummonConfig extends BaseSummonConfig
     public static final String ASSET_TYPE_ID = "Summon";
 
     /**
-     * IMPORTANT: This is a *map codec* driven by JSON "Type".
-     * Subtypes must be registered on this codec-map before assets are created/loaded.
+     * Type-dispatch codec driven by JSON {@code Type}.
+     *
+     * <p>Subtype codecs must be registered before related assets are loaded.
+     * External mods can do this through
+     * {@code me.s3b4s5.summonlib.api.SummonLibRegistration}.</p>
      */
     @Nonnull
     public static final AssetCodecMapCodec<String, SummonConfig> CODEC =
@@ -70,3 +72,5 @@ public abstract class SummonConfig extends BaseSummonConfig
         return super.isUnknown();
     }
 }
+
+

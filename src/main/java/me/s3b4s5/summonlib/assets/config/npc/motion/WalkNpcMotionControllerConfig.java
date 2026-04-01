@@ -5,7 +5,7 @@ import me.s3b4s5.summonlib.assets.codec.npc.motion.WalkNpcMotionControllerCodec;
 
 import javax.annotation.Nonnull;
 
-public final class WalkNpcMotionControllerConfig extends NpcMotionController {
+public final class WalkNpcMotionControllerConfig extends NpcMotionControllerConfig {
 
     @Nonnull
     public static final String ASSET_TYPE_ID = "Walk";
@@ -24,3 +24,5 @@ public final class WalkNpcMotionControllerConfig extends NpcMotionController {
         }).build();
     }
 }
+
+

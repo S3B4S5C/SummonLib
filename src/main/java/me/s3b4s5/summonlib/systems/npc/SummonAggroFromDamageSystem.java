@@ -1,30 +1,33 @@
 package me.s3b4s5.summonlib.systems.npc;
 
-import com.hypixel.hytale.component.*;
+import com.hypixel.hytale.component.ArchetypeChunk;
+import com.hypixel.hytale.component.CommandBuffer;
+import com.hypixel.hytale.component.ComponentType;
+import com.hypixel.hytale.component.Ref;
+import com.hypixel.hytale.component.Store;
+import com.hypixel.hytale.component.SystemGroup;
 import com.hypixel.hytale.component.query.Query;
 import com.hypixel.hytale.server.core.entity.UUIDComponent;
-import com.hypixel.hytale.server.core.modules.entity.damage.*;
-import com.hypixel.hytale.server.core.modules.time.TimeResource;
+import com.hypixel.hytale.server.core.modules.entity.damage.Damage;
+import com.hypixel.hytale.server.core.modules.entity.damage.DamageEventSystem;
+import com.hypixel.hytale.server.core.modules.entity.damage.DamageModule;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
-
-import me.s3b4s5.summonlib.internal.Logger;
-import me.s3b4s5.summonlib.runtime.SummonAggroRuntime;
-import me.s3b4s5.summonlib.tags.SummonTag;
+import me.s3b4s5.summonlib.internal.component.SummonComponent;
+import me.s3b4s5.summonlib.internal.runtime.service.SummonRuntimeServices;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.time.Instant;
+import java.util.Objects;
 import java.util.UUID;
 
 public class SummonAggroFromDamageSystem extends DamageEventSystem {
 
-    private final ComponentType<EntityStore, SummonTag> summonTagType;
-    private final Logger logger;
+    private final ComponentType<EntityStore, SummonComponent> summonTagType;
 
-    public SummonAggroFromDamageSystem(ComponentType<EntityStore, SummonTag> summonTagType) {
+    public SummonAggroFromDamageSystem(ComponentType<EntityStore, SummonComponent> summonTagType) {
         this.summonTagType = summonTagType;
-        this.logger = new Logger("[SummonAggro]");
     }
 
     @Override
@@ -62,22 +65,16 @@ public class SummonAggroFromDamageSystem extends DamageEventSystem {
 
         Instant now = resolveNow(cb);
 
-        TimeResource time = (TimeResource) cb.getResource(TimeResource.getResourceType());
-        Instant nowTR = (time != null ? time.getNow() : null);
-        Instant nowReal = Instant.now();
-
         UUID victimUuid = getUuid(chunk, index);
         boolean victimIsPlayer = cb.getComponent(victimRef, PlayerRef.getComponentType()) != null;
 
         UUID attackerUuid = attackerRef != null ? getUuid(store, attackerRef) : null;
         boolean attackerIsPlayer = attackerRef != null && cb.getComponent(attackerRef, PlayerRef.getComponentType()) != null;
 
-        SummonTag victimSummon = cb.getComponent(victimRef, summonTagType);
-        SummonTag attackerSummon = attackerRef != null ? cb.getComponent(attackerRef, summonTagType) : null;
+        SummonComponent victimSummon = cb.getComponent(victimRef, summonTagType);
+        SummonComponent attackerSummon = attackerRef != null ? cb.getComponent(attackerRef, summonTagType) : null;
 
-        // 1) If player gets hurt -> focus = attacker
         if (victimIsPlayer && victimUuid != null && attackerRef != null && attackerRef.isValid()) {
-
 
             if (attackerSummon != null) {
                 return;
@@ -85,19 +82,16 @@ public class SummonAggroFromDamageSystem extends DamageEventSystem {
 
             boolean friendly = isFriendlySummon(cb, victimUuid, attackerRef);
 
-            if (!victimRef.equals(attackerRef) && !friendly) {
-                SummonAggroRuntime.push(victimUuid, attackerRef, now);
-
-                // Verificación inmediata
-                Ref<EntityStore> peekNow = SummonAggroRuntime.peekValid(victimUuid, now);
-
+            if (!Objects.equals(victimRef, attackerRef) && !friendly) {
+                SummonRuntimeServices.targets().pushAggro(victimUuid, attackerRef, now);
+                SummonRuntimeServices.targets().peekValidAggro(victimUuid, now);
             }
 
             return;
         }
 
-        // 2) If player attack something -> focus = victim
-        if (attackerIsPlayer && attackerUuid != null && attackerRef != null && attackerRef.isValid() && !victimRef.equals(attackerRef)) {
+        if (attackerIsPlayer && attackerUuid != null && attackerRef != null && attackerRef.isValid()
+                && !Objects.equals(victimRef, attackerRef)) {
 
             boolean friendly = isFriendlySummon(cb, attackerUuid, victimRef);
 
@@ -106,9 +100,8 @@ public class SummonAggroFromDamageSystem extends DamageEventSystem {
             }
 
             if (!friendly) {
-                SummonAggroRuntime.push(attackerUuid, victimRef, now);
-
-                Ref<EntityStore> peekNow = SummonAggroRuntime.peekValid(attackerUuid, now);
+                SummonRuntimeServices.targets().pushAggro(attackerUuid, victimRef, now);
+                SummonRuntimeServices.targets().peekValidAggro(attackerUuid, now);
             }
         }
     }
@@ -130,7 +123,10 @@ public class SummonAggroFromDamageSystem extends DamageEventSystem {
     }
 
     private boolean isFriendlySummon(CommandBuffer<EntityStore> cb, UUID ownerUuid, Ref<EntityStore> targetRef) {
-        SummonTag t = cb.getComponent(targetRef, summonTagType);
+        SummonComponent t = cb.getComponent(targetRef, summonTagType);
         return t != null && ownerUuid != null && ownerUuid.equals(t.getOwnerUuid());
     }
 }
+
+
+

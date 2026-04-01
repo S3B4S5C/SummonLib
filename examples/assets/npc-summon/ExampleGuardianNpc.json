@@ -1,0 +1,11 @@
+{
+  "Type": "Npc",
+  "Id": "ExampleGuardianNpc",
+  "SlotCost": 1,
+  "Damage": 5.0,
+  "DetectRadius": 18.0,
+  "NpcRoleId": "ExampleGuardianRole",
+  "NpcMotionControllerId": "ExampleWalkMotion",
+  "FormationEnabled": true,
+  "FormationBaseRadius": 1.85
+}
